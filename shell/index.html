@@ -8,15 +8,27 @@
   /* Aged brass over deep steel. Gold belongs to Alfred's voice; cyan is
      reserved for machine telemetry; nothing else gets color. No external
      fonts or assets — the shell renders with the cable cut. */
+  /* Micron OS theme. Neutral by default and fully the owner's: dark or
+     light, and any accent. These are DEFAULTS; the shell overwrites them
+     from saved settings at load. --brass/--tele kept as aliases so older
+     rules keep working while everything migrates to --accent. */
   :root{
-    --cave:#0A0E14; --panel:#10161F; --panel-2:#0D1219;
-    --line:#1C2633; --line-bright:#2A3A4F;
-    --ink:#C9D4E3; --ink-dim:#6B7A8F;
-    --brass:#C8A24A; --brass-dim:#8A7239;
-    --tele:#4FA3B8;
-    --serif:Georgia,'Times New Roman',serif;
+    --accent:#4C8DFF; --accent-dim:#3A6BC0;
+    --serif:system-ui,-apple-system,'Segoe UI',sans-serif;
     --sans:system-ui,-apple-system,'Segoe UI',sans-serif;
     --mono:ui-monospace,'Cascadia Mono',Menlo,Consolas,monospace;
+  }
+  :root, html[data-theme="dark"]{
+    --cave:#0d1117; --panel:#161b22; --panel-2:#10151c;
+    --line:#232a33; --line-bright:#333d48;
+    --ink:#e6edf3; --ink-dim:#8b95a1;
+    --brass:var(--accent); --brass-dim:var(--accent-dim); --tele:var(--accent);
+  }
+  html[data-theme="light"]{
+    --cave:#f4f5f7; --panel:#ffffff; --panel-2:#eef0f3;
+    --line:#dfe3e8; --line-bright:#c7cdd4;
+    --ink:#1b2027; --ink-dim:#5a6472;
+    --brass:var(--accent); --brass-dim:var(--accent-dim); --tele:var(--accent);
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
@@ -135,6 +147,14 @@
       cursor:pointer;width:100%;color:var(--ink);font:inherit;text-align:left}
   .app-launch:hover{border-color:var(--brass-dim)}
   .app-launch .glyph{color:var(--brass);font-size:16px}
+  /* Appearance controls */
+  .seg{background:var(--panel);border:1px solid var(--line-bright);color:var(--ink);
+    border-radius:5px;padding:7px 16px;cursor:pointer;font-size:13px}
+  .seg.on{border-color:var(--accent);color:var(--accent)}
+  .swatch{width:26px;height:26px;border-radius:50%;border:2px solid transparent;
+    cursor:pointer;padding:0}
+  .swatch.on{border-color:var(--ink)}
+  #accent-row{gap:10px;flex-wrap:wrap}
   /* First-boot welcome */
   #welcome{position:fixed;inset:0;z-index:400;display:flex;align-items:center;
     justify-content:center;background:rgba(5,7,12,.88);backdrop-filter:blur(6px)}
@@ -316,9 +336,19 @@
 <div id="settings" aria-label="Settings">
   <h2>Settings <button id="settingsclose" aria-label="Close settings">✕</button></h2>
   <div class="setting">
+    <h3>Appearance</h3>
+    <p>Micron OS is yours to colour. Light or dark, and any accent.</p>
+    <div class="row" style="gap:8px;margin-bottom:10px">
+      <button id="theme-dark" class="seg">Dark</button>
+      <button id="theme-light" class="seg">Light</button>
+    </div>
+    <div class="row" id="accent-row"></div>
+  </div>
+  <div class="setting">
     <h3>Wallpaper</h3>
     <p>A picture behind the shell, on every terminal in the house.</p>
-    <div class="row"><button id="wp-change">Choose image</button></div>
+    <div class="row"><button id="wp-change">Choose image</button>
+      <button id="wp-clear" class="ghost">Clear</button></div>
   </div>
   <div class="setting">
     <h3>Shell lock</h3>
@@ -339,7 +369,48 @@
 
 
 <script>
+// ---- Micron OS appearance: the owner's theme, applied before anything ----
+const ACCENTS = ['#4C8DFF','#2ea043','#d29922','#db6d28','#a371f7','#e5534b','#1f6feb','#3fb950'];
+function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); }
+function applyAccent(c){
+  document.documentElement.style.setProperty('--accent', c);
+  // derive a dim shade
+  document.documentElement.style.setProperty('--accent-dim', c);
+}
+(function initTheme(){
+  let t = 'dark', a = ACCENTS[0];
+  try { t = localStorage.getItem('micron.theme') || t;
+        a = localStorage.getItem('micron.accent') || a; } catch(e){}
+  applyTheme(t); applyAccent(a);
+})();
+function wireAppearance(){
+  const setT = (t) => {
+    applyTheme(t);
+    try { localStorage.setItem('micron.theme', t); } catch(e){}
+    document.getElementById('theme-dark').classList.toggle('on', t==='dark');
+    document.getElementById('theme-light').classList.toggle('on', t==='light');
+  };
+  document.getElementById('theme-dark').onclick = () => setT('dark');
+  document.getElementById('theme-light').onclick = () => setT('light');
+  const cur = (localStorage.getItem('micron.theme')||'dark');
+  document.getElementById('theme-'+cur).classList.add('on');
+  const row = document.getElementById('accent-row'); row.replaceChildren();
+  const curA = localStorage.getItem('micron.accent') || ACCENTS[0];
+  for (const c of ACCENTS){
+    const b = document.createElement('button');
+    b.className = 'swatch' + (c===curA ? ' on' : '');
+    b.style.background = c;
+    b.onclick = () => {
+      applyAccent(c);
+      try { localStorage.setItem('micron.accent', c); } catch(e){}
+      for (const el of row.children) el.classList.remove('on');
+      b.classList.add('on');
+    };
+    row.appendChild(b);
+  }
+}
 const DEVICE = new URLSearchParams(location.search).get('device') || '';
+wireAppearance();
 if (DEVICE) document.getElementById('terminal').textContent = 'Terminal · ' + DEVICE;
 const log = document.getElementById('log');
 const form = document.getElementById('composer');
@@ -705,22 +776,32 @@ function wireBuiltinWindow(el, id, dockBtn){
   } catch(e){}
   const awin = document.getElementById('alfredwin');
   const abtn = document.getElementById('tb-alfred');
+  // The built-in chat window was a UI standing in for one that isn't built.
+  // Honest instead: the assistant is a program you OPEN in a terminal. The
+  // bar entry launches him; a real UI comes later, deliberately.
+  awin.remove();
   if (!hasAssistant){
-    awin.remove();
     abtn.remove();
     return;
   }
-  // the OS calls the assistant by ITS name -- whoever the owner installed
   let aname = 'Assistant';
   try {
     const st2 = await (await fetch('/api/status')).json();
     aname = st2.assistant_name || aname;
   } catch(e){}
   abtn.querySelector('span:last-child').textContent = aname;
-  awin.querySelector('.titlebar .t').textContent = aname;
-  document.getElementById('msg').placeholder = 'Speak to ' + aname + '\u2026';
-  wireBuiltinWindow(awin, 'alfred', abtn);
-  focusWin('alfred');
+  abtn.title = 'Open ' + aname + ' in a terminal';
+  abtn.onclick = async () => {
+    try {
+      const r = await fetch('/api/assistant/open', {method:'POST'});
+      if (!r.ok){
+        const d = await r.json().catch(()=>({}));
+        alert(d.hint || d.error || (aname + ': open a terminal and run  python3 ~/Alfred/run_core.py'));
+      }
+    } catch(e){
+      alert(aname + ': open a terminal and run  python3 ~/Alfred/run_core.py');
+    }
+  };
 })();
 function openApp(app){
   const existing = windows[app.id];

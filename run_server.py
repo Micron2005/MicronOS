@@ -405,6 +405,34 @@ def make_handler(bridge: Bridge):
                 except Exception as exc:
                     self._json(500, {"error": str(exc)})
                 return
+            if self.path == "/api/assistant/open":
+                # Open the assistant in a real terminal. The OS knows only
+                # the configured module's home; it launches the standard
+                # entrypoint there. A real GUI comes later, deliberately.
+                if bridge.provider is None:
+                    self._json(503, {"error": "no assistant installed",
+                        "hint": "install one, e.g. Alfred, then open it"}); return
+                import shutil as _sh, subprocess as _sp, os as _os
+                home = _os.environ.get("MICRON_ASSISTANT_PATH") or str(Path.home() / "Alfred")
+                runner = Path(home) / "run_core.py"
+                term = next((t for t in ("gnome-terminal","konsole","xterm","x-terminal-emulator")
+                             if _sh.which(t)), None)
+                if not runner.exists():
+                    self._json(500, {"error": "assistant entrypoint not found",
+                        "hint": f"expected {runner}"}); return
+                if not term:
+                    self._json(500, {"error": "no terminal emulator found",
+                        "hint": f"open a terminal and run: python3 {runner}"}); return
+                try:
+                    if term == "gnome-terminal":
+                        _sp.Popen([term, "--", "python3", str(runner)])
+                    else:
+                        _sp.Popen([term, "-e", f"python3 {runner}"])
+                    self._json(200, {"ok": True})
+                except Exception as exc:
+                    self._json(500, {"error": str(exc),
+                        "hint": f"open a terminal and run: python3 {runner}"})
+                return
             if self.path != "/api/chat":
                 self._json(404, {"error": "no such path"})
                 return
