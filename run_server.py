@@ -405,6 +405,34 @@ def make_handler(bridge: Bridge):
                 except Exception as exc:
                     self._json(500, {"error": str(exc)})
                 return
+            if self.path == "/api/power":
+                # Session & power from the OS's own face. shutdown/restart go
+                # through the scoped-sudo systemctl the harden role grants;
+                # logout/lock stay in userspace. loginctl is preferred (works
+                # in the cage session), systemctl is the fallback.
+                import json as _j, subprocess as _sp, shutil as _sh, os as _os
+                length = int(self.headers.get("Content-Length", "0"))
+                body = _j.loads(self.rfile.read(length) or b"{}")
+                act = body.get("action")
+                try:
+                    if act == "shutdown":
+                        _sp.Popen(["sudo", "-n", "systemctl", "poweroff"])
+                    elif act == "restart":
+                        _sp.Popen(["sudo", "-n", "systemctl", "reboot"])
+                    elif act == "logout":
+                        # end the graphical session
+                        if _sh.which("loginctl"):
+                            _sp.Popen(["loginctl", "terminate-user", _os.environ.get("USER","")])
+                        else:
+                            _sp.Popen(["pkill", "-KILL", "-u", _os.environ.get("USER","")])
+                    else:
+                        self._json(400, {"error": "unknown power action"}); return
+                    self._json(200, {"ok": True})
+                except Exception as exc:
+                    self._json(500, {"error": str(exc),
+                        "hint": "shutdown/restart need the sudo role: "
+                                "./deploy/install-micronos.sh sudo"})
+                return
             if self.path == "/api/assistant/open":
                 # Open the assistant in a real terminal. The OS knows only
                 # the configured module's home; it launches the standard

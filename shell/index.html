@@ -147,6 +147,16 @@
       cursor:pointer;width:100%;color:var(--ink);font:inherit;text-align:left}
   .app-launch:hover{border-color:var(--brass-dim)}
   .app-launch .glyph{color:var(--brass);font-size:16px}
+  .tb-right #powerbtn{background:none;border:1px solid var(--line-bright);
+    color:var(--ink);border-radius:4px;padding:5px 10px;cursor:pointer;font-size:14px}
+  .tb-right #powerbtn:hover{border-color:var(--accent);color:var(--accent)}
+  #powermenu{position:fixed;right:14px;bottom:60px;z-index:250;background:var(--panel);
+    border:1px solid var(--line-bright);border-radius:6px;padding:6px;min-width:170px;
+    box-shadow:0 12px 40px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:2px}
+  #powermenu[hidden]{display:none}
+  #powermenu button{background:none;border:none;color:var(--ink);text-align:left;
+    padding:9px 12px;border-radius:4px;cursor:pointer;font-size:13px}
+  #powermenu button:hover{background:var(--panel-2);color:var(--accent)}
   /* Appearance controls */
   .seg{background:var(--panel);border:1px solid var(--line-bright);color:var(--ink);
     border-radius:5px;padding:7px 16px;cursor:pointer;font-size:13px}
@@ -329,7 +339,14 @@
     <span id="terminal"></span>
     <span id="clock">--:--</span>
     <button id="settingsbtn" aria-label="Settings">⚙</button>
+    <button id="powerbtn" aria-label="Power">⏻</button>
     <input id="wp-file" type="file" accept="image/*" hidden>
+    <div id="powermenu" hidden>
+      <button data-act="lock">Lock</button>
+      <button data-act="logout">Log out</button>
+      <button data-act="restart">Restart</button>
+      <button data-act="shutdown">Shut down</button>
+    </div>
   </div>
 </nav>
 
