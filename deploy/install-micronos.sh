@@ -13,20 +13,36 @@ ME="$(whoami)"
 install_unit () {
   sudo cp "deploy/alfred-$1.service" "/etc/systemd/system/alfred-$1@.service"
   sudo systemctl daemon-reload
-  sudo systemctl enable --now "alfred-$1@${ME}.service"
+  sudo systemctl enable "alfred-$1@${ME}.service"
+  # restart, not enable --now: a replaced unit must replace the PROCESS too
+  sudo systemctl restart "alfred-$1@${ME}.service"
   echo "alfred-$1 running as ${ME}; logs: journalctl -u alfred-$1@${ME} -f"
 }
 
 case "$ROLE" in
   core)
-    # Two repositories, one household: the house (micron-os, this repo) and
-    # the butler (Alfred, a sibling clone). Fetch him if he is not home.
-    if [ ! -d "$HOME/Alfred/alfred" ]; then
-      git clone https://github.com/Micron2005/Alfred.git "$HOME/Alfred"
-    fi
-    install_unit core
-    echo "Micron OS shell: http://localhost:8710" ;;
-  worker) install_unit worker ;;
+    # Micron OS installs ITSELF, and only itself. An assistant is a program
+    # the owner installs separately (Alfred/install.sh is the reference).
+    sudo cp "deploy/micronos.service" "/etc/systemd/system/micronos@.service"
+    sudo systemctl daemon-reload
+    # migrate off the old fused unit if present
+    sudo systemctl disable --now "alfred-core@${ME}.service" 2>/dev/null || true
+    sudo rm -f "/etc/systemd/system/alfred-core@.service"
+    sudo systemctl daemon-reload
+    sudo systemctl enable "micronos@${ME}.service"
+    sudo systemctl restart "micronos@${ME}.service"
+    echo "Micron OS running as ${ME}; logs: journalctl -u micronos@${ME} -f"
+    echo "Micron OS shell: http://localhost:8710"
+    if [ -d "$HOME/Alfred/alfred" ]; then
+      echo "Assistant detected at ~/Alfred: hosted in service."
+    else
+      echo "No assistant installed. Micron OS runs standalone."
+      echo "To add Alfred: git clone https://github.com/Micron2005/Alfred.git ~/Alfred && ~/Alfred/install.sh"
+    fi ;;
+  worker)
+    echo "Workers are the assistant's hands and install from HIS repository:"
+    echo "  git clone https://github.com/Micron2005/Alfred.git ~/Alfred && ~/Alfred/install.sh worker"
+    exit 1 ;;
   kiosk|device)
     # kiosk: this screen opens the shell at login (desktop itself).
     # device: a household terminal — worker service AND kiosk, with the

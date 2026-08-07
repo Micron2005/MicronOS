@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Micron OS shell server. Desktop only — this is Alfred's front door.
+"""Micron OS server: shell, apps, settings, lock. A complete OS surface
+with NO assistant required. If one is installed (Alfred is the reference),
+it is hosted in-process and the assistant surfaces light up.
 
     python3 run_server.py --config configs/desktop.toml --port 8710
 
@@ -31,23 +33,36 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-# The house and the butler are separate repositories: the server imports the
-# butler from the sibling clone (~/Alfred, or MICRON_ALFRED_PATH). This must
-# run before any alfred.* import. ALFRED IS NOT HIS OS -- the layout says so.
+# Micron OS is a complete operating system WITHOUT any assistant installed.
+# An assistant (Alfred is the reference one) is a program the owner installs
+# onto it, deliberately -- like installing anything on Ubuntu. If a sibling
+# ~/Alfred exists (or MICRON_ALFRED_PATH points at one), the OS offers him a
+# home in-process; if not, the OS serves shell, apps, settings, and lock,
+# and says so honestly where the assistant would be.
 import os as _os, sys as _sys
 from pathlib import Path as _P
+
+ASSISTANT = False
 try:
     import alfred  # noqa: F401
+    ASSISTANT = True
 except ImportError:
     _b = _P(_os.environ.get("MICRON_ALFRED_PATH", str(_P.home() / "Alfred")))
     if (_b / "alfred").is_dir():
         _sys.path.insert(0, str(_b))
+        try:
+            import alfred  # noqa: F401
+            ASSISTANT = True
+        except ImportError:
+            ASSISTANT = False
 
-from alfred.bus import build_bus
-from alfred.config import load
-from alfred.core.alfred import Alfred
-from alfred.worker.runtime import WorkerRuntime
-from alfred import shell_lock
+if ASSISTANT:
+    from alfred.bus import build_bus
+    from alfred.config import load
+    from alfred.core.alfred import Alfred
+    from alfred.worker.runtime import WorkerRuntime
+
+import micron_lock as shell_lock
 
 log = logging.getLogger("alfred.server")
 SHELL = Path(__file__).parent / "shell" / "index.html"
@@ -73,14 +88,16 @@ CHAT_TIMEOUT_S = 600
 class Bridge:
     """Holds the asyncio side and lets HTTP threads call into it safely."""
 
-    def __init__(self, alfred: Alfred, loop: asyncio.AbstractEventLoop) -> None:
-        self.alfred = alfred
+    def __init__(self, alfred, loop: asyncio.AbstractEventLoop) -> None:
+        self.alfred = alfred            # None when no assistant is installed
         self.loop = loop
         self._talk_lock = asyncio.Lock()
         self.default_project: str | None = None
 
     def chat(self, message: str, project_id: str | None,
              attachments: list[str] | None = None) -> str:
+        if self.alfred is None:
+            raise RuntimeError("no assistant installed")
         async def _serialized() -> str:
             async with self._talk_lock:  # one Alfred, one conversation at a time
                 return await self.alfred.converse(
@@ -92,6 +109,8 @@ class Bridge:
         return future.result(timeout=CHAT_TIMEOUT_S)
 
     def speech_available(self) -> set[str]:
+        if self.alfred is None:
+            return set()
         async def _caps() -> set[str]:
             return await self.alfred._network_capabilities()
         future = asyncio.run_coroutine_threadsafe(_caps(), self.loop)
@@ -106,7 +125,7 @@ class Bridge:
         fallback, so phase 1 works and the Pi takes over the moment it
         joins — no config change, no restart."""
         import base64 as _b64
-        if "speech.transcribe" in self.speech_available():
+        if self.alfred is not None and "speech.transcribe" in self.speech_available():
             from alfred.contracts import Task
             task = Task(capability="speech.transcribe", prompt="transcribe",
                         timeout_s=90, max_retries=0,
@@ -118,7 +137,9 @@ class Bridge:
             if result.ok:
                 return (result.data or {}).get("text", result.summary or "")
             raise RuntimeError(result.error or "household transcription failed")
-        # local fallback
+        # local fallback (butler's libraries; without any assistant, honest 503)
+        if self.alfred is None:
+            raise ImportError("no assistant installed")
         from alfred.voice import transcribe_file
         import tempfile as _tmp
         from pathlib import Path as _P
@@ -131,7 +152,7 @@ class Bridge:
 
     def synthesize(self, text: str) -> bytes:
         import base64 as _b64
-        if "speech.synthesize" in self.speech_available():
+        if self.alfred is not None and "speech.synthesize" in self.speech_available():
             from alfred.contracts import Task
             task = Task(capability="speech.synthesize", prompt="speak",
                         timeout_s=60, max_retries=0, inputs={"text": text})
@@ -141,10 +162,16 @@ class Bridge:
             if result.ok:
                 return _b64.b64decode((result.data or {}).get("wav_b64", ""))
             raise RuntimeError(result.error or "household synthesis failed")
+        if self.alfred is None:
+            raise RuntimeError("no assistant installed")
         from alfred.voice import synth_wav
         return synth_wav(text)
 
     def status(self) -> dict:
+        if self.alfred is None:
+            return {"assistant": False, "pending_actions": [], "nodes": [],
+                    "workers": [], "projects": [], "notices": [],
+                    "default_project": None}
         async def _gather() -> dict:
             nodes = []
             for profile in await self.alfred.bus.seen_nodes():
@@ -162,6 +189,7 @@ class Bridge:
                 for w in await self.alfred.bus.workers()
             ]
             return {
+                "assistant": True,
                 "pending_actions": self.alfred.state.pending_actions(),
                 "nodes": nodes,
                 "workers": workers,
@@ -169,6 +197,9 @@ class Bridge:
                 "notices": self.alfred.state.undelivered(),
                 "default_project": self.default_project,
             }
+
+        future = asyncio.run_coroutine_threadsafe(_gather(), self.loop)
+        return future.result(timeout=15)
 
         future = asyncio.run_coroutine_threadsafe(_gather(), self.loop)
         return future.result(timeout=15)
@@ -421,6 +452,10 @@ def make_handler(bridge: Bridge):
             if self.path != "/api/chat":
                 self._json(404, {"error": "no such path"})
                 return
+            if bridge.alfred is None:
+                self._json(503, {"error": "no assistant installed",
+                    "hint": "install one; Alfred: github.com/Micron2005/Alfred"})
+                return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 payload = json.loads(self.rfile.read(length) or b"{}")
@@ -463,27 +498,32 @@ async def main() -> None:
         level=logging.INFO, format="%(asctime)s %(name)-16s %(levelname)-7s %(message)s"
     )
 
-    cfg = load(args.config)
-    bus = build_bus(cfg)
-    await bus.connect()
-
-    alfred = Alfred(bus, cfg)
-    bridge = Bridge(alfred, asyncio.get_running_loop())
-    if args.project:
-        bridge.default_project = args.project
-    else:
-        # The shell needs somewhere to file conversation; latest active
-        # project, or a home project created on first boot.
-        active = alfred.state.active_projects()
-        bridge.default_project = (
-            active[0]["id"] if active else alfred.state.create_project(
-                "Household", "General running of the house"
+    if ASSISTANT:
+        cfg = load(args.config)
+        bus = build_bus(cfg)
+        await bus.connect()
+        alfred = Alfred(bus, cfg)
+        bridge = Bridge(alfred, asyncio.get_running_loop())
+        if args.project:
+            bridge.default_project = args.project
+        else:
+            active = alfred.state.active_projects()
+            bridge.default_project = (
+                active[0]["id"] if active else alfred.state.create_project(
+                    "Household", "General running of the house"
+                )
             )
-        )
+        log.info("assistant present: Alfred is in service")
+    else:
+        cfg, bus = {}, None
+        bridge = Bridge(None, asyncio.get_running_loop())
+        log.info("no assistant installed; Micron OS running standalone")
 
-    background = [asyncio.create_task(alfred.supervise())]
-    if cfg["worker"]["capabilities"]:
-        background.append(asyncio.create_task(WorkerRuntime(bus, cfg).run()))
+    background = []
+    if ASSISTANT:
+        background.append(asyncio.create_task(alfred.supervise()))
+        if cfg["worker"]["capabilities"]:
+            background.append(asyncio.create_task(WorkerRuntime(bus, cfg).run()))
 
     httpd = ThreadingHTTPServer((args.host, args.port), make_handler(bridge))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -497,7 +537,8 @@ async def main() -> None:
         httpd.shutdown()
         for task in background:
             task.cancel()
-        await bus.close()
+        if bus is not None:
+            await bus.close()
 
 
 if __name__ == "__main__":

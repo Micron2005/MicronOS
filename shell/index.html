@@ -277,10 +277,11 @@
   <div id="welcome-card">
     <div class="w-mark">M I C R O N &nbsp; O S</div>
     <div class="w-step" data-step="1">
-      <p>The house is awake for the first time. Alfred keeps it — and he
-      knows nothing yet, by design. He learns you from here on.</p>
-      <label>What should he call you?</label>
-      <input id="w-name" autocomplete="off" placeholder="Your name, or sir, or anything">
+      <p id="w-intro">Micron OS is awake for the first time. This machine is
+      yours: apps in the bar below, settings beside the clock.</p>
+      <label id="w-name-label" hidden>An assistant is installed. What should
+      he call you?</label>
+      <input id="w-name" autocomplete="off" hidden placeholder="Your name, or sir, or anything">
       <div class="w-btns"><button id="w-skip1" class="ghost">Skip</button>
         <button id="w-next1">Continue</button></div>
     </div>
@@ -292,8 +293,8 @@
         <button id="w-next2">Set lock</button></div>
     </div>
     <div class="w-step" data-step="3" hidden>
-      <p id="w-done-msg">The house is yours. Alfred is in the bar below —
-      so are your apps. Wallpaper and the rest live in Settings.</p>
+      <p id="w-done-msg">Micron OS is yours. Wallpaper and the rest live in
+      Settings.</p>
       <div class="w-btns"><button id="w-finish">Enter Micron OS</button></div>
     </div>
   </div>
@@ -638,11 +639,23 @@ function wireBuiltinWindow(el, id, dockBtn){
   };
 }
 // ---- first boot: the house introduces itself ----
-(function(){
+(async function(){
   let done = false;
   try { done = localStorage.getItem('micron.setup') === '1'; } catch(e){}
   if (done) return;
+  let hasAssistant = false;
+  try {
+    const st = await (await fetch('/api/status')).json();
+    hasAssistant = !!st.assistant;
+  } catch(e){}
   const w = document.getElementById('welcome');
+  if (hasAssistant){
+    document.getElementById('w-name-label').hidden = false;
+    document.getElementById('w-name').hidden = false;
+    document.getElementById('w-intro').textContent =
+      'Micron OS is awake for the first time. An assistant keeps the house '
+      + '\u2014 he knows nothing yet, by design, and learns you from here on.';
+  }
   w.hidden = false;
   const step = (n) => {
     for (const el of w.querySelectorAll('.w-step')) el.hidden = el.dataset.step != n;
@@ -682,9 +695,24 @@ function wireBuiltinWindow(el, id, dockBtn){
   step(1);
 })();
 
-wireBuiltinWindow(document.getElementById('alfredwin'), 'alfred',
-                  document.getElementById('tb-alfred'));
-focusWin('alfred');
+// Assistant surfaces exist only when an assistant is installed.
+// Micron OS with none is simply an operating system.
+(async function(){
+  let hasAssistant = false;
+  try {
+    const st = await (await fetch('/api/status')).json();
+    hasAssistant = !!st.assistant;
+  } catch(e){}
+  const awin = document.getElementById('alfredwin');
+  const abtn = document.getElementById('tb-alfred');
+  if (!hasAssistant){
+    awin.remove();
+    abtn.remove();
+    return;
+  }
+  wireBuiltinWindow(awin, 'alfred', abtn);
+  focusWin('alfred');
+})();
 function openApp(app){
   const existing = windows[app.id];
   if (existing){
@@ -739,12 +767,14 @@ function openApp(app){
 }
 function renderDockState(){
   const ab = document.getElementById('tb-alfred');
+  if (ab){
   const aw = windows['alfred'];
   const adot = ab.querySelector('.running');
   if (aw && !aw.minimized && !adot){
     const d = document.createElement('span'); d.className = 'running'; ab.appendChild(d);
   }
   if ((!aw || aw.minimized) && adot) adot.remove();
+  }
   for (const b of document.querySelectorAll('.app-launch')){
     const id = b.dataset.appid;
     const dot = b.querySelector('.running');
