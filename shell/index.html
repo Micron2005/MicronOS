@@ -135,6 +135,26 @@
       cursor:pointer;width:100%;color:var(--ink);font:inherit;text-align:left}
   .app-launch:hover{border-color:var(--brass-dim)}
   .app-launch .glyph{color:var(--brass);font-size:16px}
+  /* First-boot welcome */
+  #welcome{position:fixed;inset:0;z-index:400;display:flex;align-items:center;
+    justify-content:center;background:rgba(5,7,12,.88);backdrop-filter:blur(6px)}
+  #welcome[hidden]{display:none}
+  #welcome-card{width:min(480px, calc(100vw - 48px));border:1px solid var(--line-bright);
+    border-radius:8px;background:var(--cave);padding:34px 36px;
+    box-shadow:0 24px 70px rgba(0,0,0,.6)}
+  .w-mark{font-family:var(--serif);letter-spacing:.42em;color:var(--brass);
+    font-size:15px;text-align:center;margin-bottom:22px}
+  #welcome-card p{color:var(--ink-dim);font-size:13.5px;line-height:1.65;margin:0 0 16px}
+  #welcome-card label{display:block;font-family:var(--mono);font-size:10px;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:8px}
+  #welcome-card input{width:100%;background:var(--bg);border:1px solid var(--line-bright);
+    border-radius:4px;color:var(--ink);padding:10px 12px;font-size:14px;margin-bottom:18px}
+  #welcome-card input:focus{outline:none;border-color:var(--brass-dim)}
+  .w-btns{display:flex;justify-content:flex-end;gap:10px}
+  .w-btns button{background:var(--brass);border:none;border-radius:4px;color:#14100a;
+    padding:9px 20px;cursor:pointer;font-size:13px;letter-spacing:.06em}
+  .w-btns button.ghost{background:none;border:1px solid var(--line-bright);color:var(--ink-dim)}
+  .w-btns button:hover{filter:brightness(1.1)}
   /* The desktop and its bar. The screen is a surface, not a page. */
   body{overflow:hidden}
   header{display:none}
@@ -252,6 +272,33 @@
 </div>
 
 <!-- The system bar: the machine's one constant. -->
+<!-- First boot: the house introduces itself. Shows once, skippable. -->
+<div id="welcome" hidden>
+  <div id="welcome-card">
+    <div class="w-mark">M I C R O N &nbsp; O S</div>
+    <div class="w-step" data-step="1">
+      <p>The house is awake for the first time. Alfred keeps it — and he
+      knows nothing yet, by design. He learns you from here on.</p>
+      <label>What should he call you?</label>
+      <input id="w-name" autocomplete="off" placeholder="Your name, or sir, or anything">
+      <div class="w-btns"><button id="w-skip1" class="ghost">Skip</button>
+        <button id="w-next1">Continue</button></div>
+    </div>
+    <div class="w-step" data-step="2" hidden>
+      <p>A lock for this shell, if you want one — asked for whenever the
+      house is opened to other screens. Optional today.</p>
+      <input id="w-pass" type="password" placeholder="Shell password (optional)">
+      <div class="w-btns"><button id="w-skip2" class="ghost">Skip</button>
+        <button id="w-next2">Set lock</button></div>
+    </div>
+    <div class="w-step" data-step="3" hidden>
+      <p id="w-done-msg">The house is yours. Alfred is in the bar below —
+      so are your apps. Wallpaper and the rest live in Settings.</p>
+      <div class="w-btns"><button id="w-finish">Enter Micron OS</button></div>
+    </div>
+  </div>
+</div>
+
 <nav id="taskbar" aria-label="System bar">
   <button id="tb-alfred" class="tb-app" title="Alfred">
     <span class="glyph">◈</span><span>Alfred</span></button>
@@ -590,6 +637,51 @@ function wireBuiltinWindow(el, id, dockBtn){
     } else { focusWin(id); }
   };
 }
+// ---- first boot: the house introduces itself ----
+(function(){
+  let done = false;
+  try { done = localStorage.getItem('micron.setup') === '1'; } catch(e){}
+  if (done) return;
+  const w = document.getElementById('welcome');
+  w.hidden = false;
+  const step = (n) => {
+    for (const el of w.querySelectorAll('.w-step')) el.hidden = el.dataset.step != n;
+    const inp = w.querySelector('.w-step[data-step="'+n+'"] input');
+    if (inp) inp.focus();
+  };
+  const finish = () => {
+    try { localStorage.setItem('micron.setup','1'); } catch(e){}
+    w.hidden = true;
+  };
+  document.getElementById('w-next1').onclick = async () => {
+    const name = document.getElementById('w-name').value.trim();
+    if (name){
+      try { await fetch('/api/chat', {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({message: 'Please call me ' + name + '. Remember that.'})});
+      } catch(e){}
+    }
+    step(2);
+  };
+  document.getElementById('w-skip1').onclick = () => step(2);
+  document.getElementById('w-next2').onclick = async () => {
+    const pass = document.getElementById('w-pass').value;
+    if (pass){
+      try { await fetch('/api/setlock', {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({password: pass})});
+        document.getElementById('w-done-msg').textContent =
+          'Lock set. The house is yours. Alfred is in the bar below — so are '
+          + 'your apps. Wallpaper and the rest live in Settings.';
+      } catch(e){}
+    }
+    step(3);
+  };
+  document.getElementById('w-skip2').onclick = () => step(3);
+  document.getElementById('w-finish').onclick = finish;
+  step(1);
+})();
+
 wireBuiltinWindow(document.getElementById('alfredwin'), 'alfred',
                   document.getElementById('tb-alfred'));
 focusWin('alfred');

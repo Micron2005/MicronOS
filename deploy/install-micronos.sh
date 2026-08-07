@@ -47,6 +47,42 @@ X-GNOME-Autostart-enabled=true
 DESKTOP
     echo "This machine is now a Micron OS terminal -> ${SHELL_URL}"
     echo "Undo kiosk with: rm ~/.config/autostart/micronos-shell.desktop" ;;
+  identity)
+    # THE NAME: the machine identifies as Micron OS everywhere an OS states
+    # its name — boot menu, About screen, login banner, terminal issue line.
+    # Additive and reversible: originals are backed up once; ID=ubuntu stays
+    # intact underneath so apt and drivers keep working (the portability
+    # rule: the base is plumbing, the identity is ours).
+    [ -f /etc/os-release.base.bak ] || sudo cp /etc/os-release /etc/os-release.base.bak
+    sudo python3 - << 'PYID'
+import re
+base = open('/etc/os-release.base.bak').read()
+base = re.sub(r'^PRETTY_NAME=.*$', 'PRETTY_NAME="Micron OS 0.1"', base, flags=re.M)
+base = re.sub(r'^NAME=.*$', 'NAME="Micron OS"', base, flags=re.M)
+base = re.sub(r'^HOME_URL=.*$', 'HOME_URL="https://github.com/Micron2005/MicronOS"', base, flags=re.M)
+open('/etc/os-release','w').write(base)
+PYID
+    echo "Micron OS 0.1 \n \l" | sudo tee /etc/issue > /dev/null
+    # boot menu: entries say Micron OS
+    [ -f /etc/default/grub.base.bak ] || sudo cp /etc/default/grub /etc/default/grub.base.bak
+    if grep -q '^GRUB_DISTRIBUTOR' /etc/default/grub; then
+      sudo sed -i 's|^GRUB_DISTRIBUTOR=.*|GRUB_DISTRIBUTOR="Micron OS"|' /etc/default/grub
+    else
+      echo 'GRUB_DISTRIBUTOR="Micron OS"' | sudo tee -a /etc/default/grub > /dev/null
+    fi
+    sudo update-grub
+    # login screen: the name above the prompt
+    sudo mkdir -p /etc/gdm3
+    if [ -f /etc/gdm3/greeter.dconf-defaults ]; then
+      sudo sed -i "s|^#\?\s*banner-message-enable=.*|banner-message-enable=true|" /etc/gdm3/greeter.dconf-defaults
+      sudo sed -i "s|^#\?\s*banner-message-text=.*|banner-message-text='M I C R O N   O S'|" /etc/gdm3/greeter.dconf-defaults
+    fi
+    echo ""
+    echo "The machine now calls itself Micron OS: boot menu, About, login,"
+    echo "terminal. Originals backed up: /etc/os-release.base.bak,"
+    echo "/etc/default/grub.base.bak — restore either to undo."
+    ;;
+
   session)
     # STAGE 1 PROPER: Micron OS as its own login session. Not an app over
     # GNOME — the session IS the shell. cage (a Wayland kiosk compositor)
@@ -151,5 +187,5 @@ DESK
     echo "Done. Alfred already binds to localhost by default, so nothing off"
     echo "this machine can reach him unless you pass --host 0.0.0.0 AND open a"
     echo "port above. The firewall + auto-updates are the real perimeter." ;;
-  *) echo "usage: $0 core|worker|kiosk [host]|device <host>|sudo|harden"; exit 1 ;;
+  *) echo "usage: $0 core|worker|kiosk [host]|device <host>|session|identity|sudo|harden"; exit 1 ;;
 esac
