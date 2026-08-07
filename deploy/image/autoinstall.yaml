@@ -1,0 +1,29 @@
+#cloud-config
+# MICRON OS INSTALL IMAGE — Stage 2 (OWNERSHIP.md)
+# Baked into the Ubuntu 24.04 ISO by build-image.sh. The person installing
+# answers exactly two things — who they are, and which disk — and everything
+# else is hands-free. What first boot shows is Micron OS.
+autoinstall:
+  version: 1
+  # The two human questions. Storage stays interactive ON PURPOSE: tonight's
+  # lesson — on a multi-disk machine, the disk choice belongs to a person.
+  interactive-sections:
+    - identity
+    - storage
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  packages:
+    - git
+    - python3-pip
+    - python3-venv
+    - ffmpeg
+    - curl
+    - cage
+  late-commands:
+    # Hand the target system the first-boot script; it does the heavy
+    # lifting (Ollama, model, repo, services) WITH network, after install.
+    - cp /cdrom/micron/firstboot.sh /target/usr/local/sbin/micron-firstboot.sh
+    - chmod +x /target/usr/local/sbin/micron-firstboot.sh
+    - cp /cdrom/micron/micron-firstboot.service /target/etc/systemd/system/micron-firstboot.service
+    - curtin in-target -- systemctl enable micron-firstboot.service

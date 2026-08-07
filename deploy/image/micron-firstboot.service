@@ -1,0 +1,14 @@
+[Unit]
+Description=Micron OS first boot: bring the house to life
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/micron-firstboot.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/micron-firstboot.sh
+TimeoutStartSec=0
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target
