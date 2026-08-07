@@ -1,0 +1,10 @@
+# Micron OS's own configuration (the house; no assistant required to read it)
+
+[assistant]
+# The assistant is whatever YOU installed. Name the provider module here.
+# Alfred is the reference: his repo cloned to ~/Alfred provides
+# "alfred.provider". Bring your own AI: implement assistant_api.py's
+# AssistantProvider in your module, put it on the path (or set `path`),
+# and name it here. Micron OS hosts whoever this says.
+module = "alfred.provider"
+path = "~/Alfred"          # added to sys.path if the module is not importable

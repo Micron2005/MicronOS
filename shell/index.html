@@ -710,6 +710,15 @@ function wireBuiltinWindow(el, id, dockBtn){
     abtn.remove();
     return;
   }
+  // the OS calls the assistant by ITS name -- whoever the owner installed
+  let aname = 'Assistant';
+  try {
+    const st2 = await (await fetch('/api/status')).json();
+    aname = st2.assistant_name || aname;
+  } catch(e){}
+  abtn.querySelector('span:last-child').textContent = aname;
+  awin.querySelector('.titlebar .t').textContent = aname;
+  document.getElementById('msg').placeholder = 'Speak to ' + aname + '\u2026';
   wireBuiltinWindow(awin, 'alfred', abtn);
   focusWin('alfred');
 })();

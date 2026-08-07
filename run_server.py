@@ -34,33 +34,43 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 # Micron OS is a complete operating system WITHOUT any assistant installed.
-# An assistant (Alfred is the reference one) is a program the owner installs
-# onto it, deliberately -- like installing anything on Ubuntu. If a sibling
-# ~/Alfred exists (or MICRON_ALFRED_PATH points at one), the OS offers him a
-# home in-process; if not, the OS serves shell, apps, settings, and lock,
-# and says so honestly where the assistant would be.
+# An assistant is a PROGRAM the owner installs: any module implementing
+# assistant_api.AssistantProvider, named in configs/micron.toml. The OS
+# hosts whoever that says -- Alfred is merely the reference implementation.
 import os as _os, sys as _sys
+try:
+    import tomllib as _toml
+except ImportError:      # py<3.11
+    _toml = None
 from pathlib import Path as _P
 
-ASSISTANT = False
-try:
-    import alfred  # noqa: F401
-    ASSISTANT = True
-except ImportError:
-    _b = _P(_os.environ.get("MICRON_ALFRED_PATH", str(_P.home() / "Alfred")))
-    if (_b / "alfred").is_dir():
-        _sys.path.insert(0, str(_b))
+def _load_provider_factory():
+    module = _os.environ.get("MICRON_ASSISTANT_MODULE")
+    path = _os.environ.get("MICRON_ASSISTANT_PATH")
+    cfg_file = _P(__file__).parent / "configs" / "micron.toml"
+    if (not module) and _toml and cfg_file.exists():
         try:
-            import alfred  # noqa: F401
-            ASSISTANT = True
-        except ImportError:
-            ASSISTANT = False
+            data = _toml.loads(cfg_file.read_text())
+            module = (data.get("assistant") or {}).get("module")
+            path = path or (data.get("assistant") or {}).get("path")
+        except Exception:
+            module = None
+    if not module:
+        return None, None
+    if path:
+        pp = str(_P(path).expanduser())
+        if pp not in _sys.path:
+            _sys.path.insert(0, pp)
+    try:
+        import importlib
+        mod = importlib.import_module(module)
+        return getattr(mod, "create_provider"), module
+    except Exception as exc:
+        print(f"assistant module {module!r} not loadable: {exc}")
+        return None, None
 
-if ASSISTANT:
-    from alfred.bus import build_bus
-    from alfred.config import load
-    from alfred.core.alfred import Alfred
-    from alfred.worker.runtime import WorkerRuntime
+_PROVIDER_FACTORY, _PROVIDER_MODULE = _load_provider_factory()
+ASSISTANT = _PROVIDER_FACTORY is not None
 
 import micron_lock as shell_lock
 
@@ -86,120 +96,66 @@ CHAT_TIMEOUT_S = 600
 
 
 class Bridge:
-    """Holds the asyncio side and lets HTTP threads call into it safely."""
+    """Threads (HTTP) to loop (assistant) adapter. Knows only the Assistant
+    Interface; contains not one line of any particular assistant."""
 
-    def __init__(self, alfred, loop: asyncio.AbstractEventLoop) -> None:
-        self.alfred = alfred            # None when no assistant is installed
+    def __init__(self, provider, loop: asyncio.AbstractEventLoop) -> None:
+        self.provider = provider          # None: Micron OS standalone
         self.loop = loop
-        self._talk_lock = asyncio.Lock()
-        self.default_project: str | None = None
+        self.default_project = None
+
+    # legacy alias used by a few endpoints
+    @property
+    def alfred(self):
+        return self.provider
+
+    def _run(self, coro, timeout):
+        return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout=timeout)
 
     def chat(self, message: str, project_id: str | None,
              attachments: list[str] | None = None) -> str:
-        if self.alfred is None:
+        if self.provider is None:
             raise RuntimeError("no assistant installed")
-        async def _serialized() -> str:
-            async with self._talk_lock:  # one Alfred, one conversation at a time
-                return await self.alfred.converse(
-                    message, project_id or self.default_project,
-                    attachments=attachments,
-                )
-
-        future = asyncio.run_coroutine_threadsafe(_serialized(), self.loop)
-        return future.result(timeout=CHAT_TIMEOUT_S)
+        return self._run(self.provider.chat(message, project_id, attachments),
+                         timeout=600)
 
     def speech_available(self) -> set[str]:
-        if self.alfred is None:
+        if self.provider is None:
             return set()
-        async def _caps() -> set[str]:
-            return await self.alfred._network_capabilities()
-        future = asyncio.run_coroutine_threadsafe(_caps(), self.loop)
         try:
-            return {c for c in future.result(timeout=10) if c.startswith("speech.")}
+            return self._run(self.provider.speech_capabilities(), timeout=10)
         except Exception:
             return set()
 
     def transcribe(self, audio: bytes, fmt: str) -> str:
-        """Household first: if any node offers speech.transcribe (the Pi,
-        by design), the audio rides the bus there. Local libraries are the
-        fallback, so phase 1 works and the Pi takes over the moment it
-        joins — no config change, no restart."""
-        import base64 as _b64
-        if self.alfred is not None and "speech.transcribe" in self.speech_available():
-            from alfred.contracts import Task
-            task = Task(capability="speech.transcribe", prompt="transcribe",
-                        timeout_s=90, max_retries=0,
-                        inputs={"audio_b64": _b64.b64encode(audio).decode(),
-                                "format": fmt})
-            future = asyncio.run_coroutine_threadsafe(
-                self.alfred._dispatch(task), self.loop)
-            result = future.result(timeout=120)
-            if result.ok:
-                return (result.data or {}).get("text", result.summary or "")
-            raise RuntimeError(result.error or "household transcription failed")
-        # local fallback (butler's libraries; without any assistant, honest 503)
-        if self.alfred is None:
+        if self.provider is None:
             raise ImportError("no assistant installed")
-        from alfred.voice import transcribe_file
-        import tempfile as _tmp
-        from pathlib import Path as _P
-        with _tmp.NamedTemporaryFile(suffix="." + fmt, delete=False) as tf:
-            tf.write(audio); tmp_path = tf.name
-        try:
-            return transcribe_file(tmp_path)
-        finally:
-            _P(tmp_path).unlink(missing_ok=True)
+        return self._run(self.provider.transcribe(audio, fmt), timeout=120)
 
     def synthesize(self, text: str) -> bytes:
-        import base64 as _b64
-        if self.alfred is not None and "speech.synthesize" in self.speech_available():
-            from alfred.contracts import Task
-            task = Task(capability="speech.synthesize", prompt="speak",
-                        timeout_s=60, max_retries=0, inputs={"text": text})
-            future = asyncio.run_coroutine_threadsafe(
-                self.alfred._dispatch(task), self.loop)
-            result = future.result(timeout=90)
-            if result.ok:
-                return _b64.b64decode((result.data or {}).get("wav_b64", ""))
-            raise RuntimeError(result.error or "household synthesis failed")
-        if self.alfred is None:
+        if self.provider is None:
             raise RuntimeError("no assistant installed")
-        from alfred.voice import synth_wav
-        return synth_wav(text)
+        return self._run(self.provider.synthesize(text), timeout=90)
+
+    def approve_action(self, action_id: int):
+        return self._run(self.provider.approve_action(action_id), timeout=300)
+
+    def decline_action(self, action_id: int):
+        return self._run(self.provider.decline_action(action_id), timeout=30)
 
     def status(self) -> dict:
-        if self.alfred is None:
-            return {"assistant": False, "pending_actions": [], "nodes": [],
-                    "workers": [], "projects": [], "notices": [],
-                    "default_project": None}
-        async def _gather() -> dict:
-            nodes = []
-            for profile in await self.alfred.bus.seen_nodes():
-                known = self.alfred.state.known_node(profile.node_id)
-                caps = json.loads((known or {}).get("capabilities") or "[]")
-                nodes.append({
-                    "node_id": profile.node_id,
-                    "name": (known or {}).get("name") or "",
-                    "describe": profile.describe(),
-                    "capabilities": caps,
-                    "assigned": bool(caps),
-                })
-            workers = [
-                {"id": w.worker_id, "queue": w.queue_depth, "caps": w.capabilities}
-                for w in await self.alfred.bus.workers()
-            ]
-            return {
-                "assistant": True,
-                "pending_actions": self.alfred.state.pending_actions(),
-                "nodes": nodes,
-                "workers": workers,
-                "projects": self.alfred.state.active_projects(),
-                "notices": self.alfred.state.undelivered(),
-                "default_project": self.default_project,
-            }
-
-        future = asyncio.run_coroutine_threadsafe(_gather(), self.loop)
-        return future.result(timeout=15)
+        base = {"assistant": self.provider is not None,
+                "assistant_name": getattr(self.provider, "name", None),
+                "pending_actions": [], "nodes": [], "workers": [],
+                "projects": [], "notices": [], "default_project": None}
+        if self.provider is None:
+            return base
+        try:
+            extra = self._run(self.provider.status(), timeout=15)
+            base.update(extra or {})
+        except Exception as exc:
+            base["status_error"] = str(exc)
+        return base
 
         future = asyncio.run_coroutine_threadsafe(_gather(), self.loop)
         return future.result(timeout=15)
@@ -405,10 +361,10 @@ def make_handler(bridge: Bridge):
                 try:
                     if verb == "approve":
                         future = asyncio.run_coroutine_threadsafe(
-                            bridge.alfred.approve_action(action_id), bridge.loop)
+                            bridge.provider.approve_action(action_id), bridge.loop)
                         self._json(200, {"result": future.result(timeout=CHAT_TIMEOUT_S)})
                     else:
-                        self._json(200, {"result": bridge.alfred.decline_action(action_id)})
+                        self._json(200, {"result": bridge.decline_action(action_id)})
                 except Exception as exc:
                     self._json(500, {"error": str(exc)})
                 return
@@ -452,7 +408,7 @@ def make_handler(bridge: Bridge):
             if self.path != "/api/chat":
                 self._json(404, {"error": "no such path"})
                 return
-            if bridge.alfred is None:
+            if bridge.provider is None:
                 self._json(503, {"error": "no assistant installed",
                     "hint": "install one; Alfred: github.com/Micron2005/Alfred"})
                 return
@@ -499,31 +455,17 @@ async def main() -> None:
     )
 
     if ASSISTANT:
-        cfg = load(args.config)
-        bus = build_bus(cfg)
-        await bus.connect()
-        alfred = Alfred(bus, cfg)
-        bridge = Bridge(alfred, asyncio.get_running_loop())
-        if args.project:
-            bridge.default_project = args.project
-        else:
-            active = alfred.state.active_projects()
-            bridge.default_project = (
-                active[0]["id"] if active else alfred.state.create_project(
-                    "Household", "General running of the house"
-                )
-            )
-        log.info("assistant present: Alfred is in service")
+        provider = _PROVIDER_FACTORY(asyncio.get_running_loop())
+        await provider.start()
+        bridge = Bridge(provider, asyncio.get_running_loop())
+        bridge.default_project = args.project or getattr(provider, "default_project", None)
+        log.info("assistant present: %s (%s)", getattr(provider, "name", "?"), _PROVIDER_MODULE)
     else:
-        cfg, bus = {}, None
+        provider = None
         bridge = Bridge(None, asyncio.get_running_loop())
         log.info("no assistant installed; Micron OS running standalone")
 
-    background = []
-    if ASSISTANT:
-        background.append(asyncio.create_task(alfred.supervise()))
-        if cfg["worker"]["capabilities"]:
-            background.append(asyncio.create_task(WorkerRuntime(bus, cfg).run()))
+    background = []   # providers own their background tasks now
 
     httpd = ThreadingHTTPServer((args.host, args.port), make_handler(bridge))
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -537,8 +479,8 @@ async def main() -> None:
         httpd.shutdown()
         for task in background:
             task.cancel()
-        if bus is not None:
-            await bus.close()
+        if provider is not None:
+            await provider.stop()
 
 
 if __name__ == "__main__":
