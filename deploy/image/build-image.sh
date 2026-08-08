@@ -8,10 +8,19 @@ SRC="$1"
 command -v xorriso >/dev/null || { echo "need xorriso: sudo apt install -y xorriso"; exit 1; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(mktemp -d)"
+LOG="$WORK.log"
 OUT="$(dirname "$SRC")/micron-os.iso"
-echo "== extracting the stock ISO =="
-xorriso -osirrox on -indev "$SRC" -extract / "$WORK" >/dev/null 2>&1
-chmod -R u+w "$WORK"
+# the forge needs room: ~7GB extracted tree + ~7GB output
+NEED_GB=14
+AVAIL_GB=$(df -BG --output=avail "$(dirname "$WORK")" | tail -1 | tr -dc '0-9')
+if [ "${AVAIL_GB:-0}" -lt "$NEED_GB" ]; then
+  echo "Not enough space in $(dirname "$WORK"): ${AVAIL_GB}G free, need ${NEED_GB}G"; exit 1
+fi
+echo "== extracting the stock ISO (quiet for a few minutes; log: $LOG) =="
+if ! xorriso -osirrox on -indev "$SRC" -extract / "$WORK" >"$LOG" 2>&1; then
+  echo "EXTRACT FAILED -- last lines of the log:"; tail -8 "$LOG"; exit 1
+fi
+chmod -R u+w "$WORK" 2>/dev/null || true
 echo "== seeding Micron OS =="
 cp "$HERE/autoinstall.yaml" "$WORK/autoinstall.yaml"
 mkdir -p "$WORK/micron"
@@ -23,7 +32,7 @@ sed -i 's|Try or Install Ubuntu|Install Micron OS|g' "$WORK/boot/grub/grub.cfg"
 sed -i 's|Ubuntu (safe graphics)|Micron OS (safe graphics)|g' "$WORK/boot/grub/grub.cfg"
 sed -i 's|set timeout=30|set timeout=5|' "$WORK/boot/grub/grub.cfg" || true
 echo "== repacking (this takes a minute) =="
-xorriso -as mkisofs -r -V "MICRON_OS" \
+if ! xorriso -as mkisofs -r -V "MICRON_OS" \
   --grub2-mbr --interval:local_fs:0s-15s:zero_mbrpt,zero_gpt:"$SRC" \
   -partition_offset 16 \
   --mbr-force-bootable \
@@ -36,7 +45,9 @@ xorriso -as mkisofs -r -V "MICRON_OS" \
   -eltorito-alt-boot \
   -e '--interval:appended_partition_2:::' \
   -no-emul-boot \
-  -o "$OUT" "$WORK" >/dev/null 2>&1
+  -o "$OUT" "$WORK" >>"$LOG" 2>&1; then
+  echo "REPACK FAILED -- last lines of the log:"; tail -8 "$LOG"; exit 1
+fi
 rm -rf "$WORK"
 echo "== done: $OUT =="
 echo "Flash it like any ISO. Boot it, answer two questions (you, and the"
