@@ -21,6 +21,7 @@ MIRROR="http://deb.debian.org/debian"
 LOG="$BUILD/foundry.log"
 mkdir -p "$BUILD"; : > "$LOG"
 say(){ echo "== $* =="; }
+trap 'echo "FOUNDRY FAILED (line $LINENO) -- log tail:"; tail -8 "$LOG"' ERR
 
 say "stage 0: the foundry's own tools"
 apt-get install -y debootstrap squashfs-tools xorriso mtools dosfstools \
@@ -69,12 +70,19 @@ echo "micron-os" > "$ROOT/etc/hostname"
 printf 'Micron OS 0.1 \\n \\l\n' > "$ROOT/etc/issue"
 
 say "stage 4: the house moves in (server, shell, apps, session)"
+for need in run_server.py micron_lock.py micron_files.py assistant_api.py shell apps; do
+  [ -e "$REPO/$need" ] || { echo "MISSING $REPO/$need -- apply micronos-everything.tar.gz to ~/micron-os first, push, then rerun"; exit 1; }
+done
+grep -q "ASSISTANT = " "$REPO/run_server.py" || {
+  echo "run_server.py is the OLD fused version -- apply micronos-everything.tar.gz first"; exit 1; }
 rm -rf "$ROOT/opt/micron-os"
 mkdir -p "$ROOT/opt/micron-os"
 cp -r "$REPO/shell" "$REPO/apps" "$REPO/configs" "$REPO/docs" \
       "$REPO"/run_server.py "$REPO"/micron_lock.py "$REPO"/micron_files.py \
-      "$REPO"/assistant_api.py "$REPO"/*.md "$ROOT/opt/micron-os/" 2>/dev/null
+      "$REPO"/assistant_api.py "$ROOT/opt/micron-os/"
+cp "$REPO"/*.md "$ROOT/opt/micron-os/" 2>/dev/null || true
 chroot "$ROOT" bash -c "id micron >/dev/null 2>&1 || useradd -m -s /bin/bash -G sudo,netdev micron"
+chroot "$ROOT" bash -c "echo micron:micron | chpasswd"   # live console login: micron / micron
 # live disc auto-login; installed systems get their own user via micron-install
 cat > "$ROOT/etc/systemd/system/micronos.service" << 'EOF'
 [Unit]
