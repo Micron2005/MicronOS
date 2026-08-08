@@ -16,6 +16,10 @@ runuser -l "$FIRSTUSER" -c 'cd micron-os && ./deploy/install-micronos.sh core'
 runuser -l "$FIRSTUSER" -c 'cd micron-os && ./deploy/install-micronos.sh sudo'
 runuser -l "$FIRSTUSER" -c 'cd micron-os && ./deploy/install-micronos.sh harden'
 runuser -l "$FIRSTUSER" -c 'cd micron-os && ./deploy/install-micronos.sh session'
+# identity + splash need root (os-release, grub, initramfs): run as root,
+# from the user's clone. 'sudo' inside the roles is a no-op for root.
+bash "$HOMEDIR/micron-os/deploy/install-micronos.sh" identity || true
+bash "$HOMEDIR/micron-os/deploy/install-micronos.sh" splash || true
 echo "Micron OS installed. To add an assistant later (Alfred is the reference):"
 echo "  git clone https://github.com/Micron2005/Alfred.git ~/Alfred && ~/Alfred/install.sh"
 

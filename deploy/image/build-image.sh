@@ -18,6 +18,10 @@ mkdir -p "$WORK/micron"
 cp "$HERE/firstboot.sh" "$HERE/micron-firstboot.service" "$WORK/micron/"
 # tell the installer to read the seed
 sed -i 's|---|autoinstall ---|g' "$WORK/boot/grub/grub.cfg"
+# the DOWNLOADED OS's own boot menu: it says Micron OS, not Ubuntu
+sed -i 's|Try or Install Ubuntu|Install Micron OS|g' "$WORK/boot/grub/grub.cfg"
+sed -i 's|Ubuntu (safe graphics)|Micron OS (safe graphics)|g' "$WORK/boot/grub/grub.cfg"
+sed -i 's|set timeout=30|set timeout=5|' "$WORK/boot/grub/grub.cfg" || true
 echo "== repacking (this takes a minute) =="
 xorriso -as mkisofs -r -V "MICRON_OS" \
   --grub2-mbr --interval:local_fs:0s-15s:zero_mbrpt,zero_gpt:"$SRC" \

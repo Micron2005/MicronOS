@@ -26,6 +26,16 @@ shell.
 3. Photograph any error at any step; the boot menu chooses between the two
    installs afterward.
 
+## What the finished disc does now
+
+- Boot the USB -> the menu says **Install Micron OS**.
+- The installer asks two things: who you are, and which disk.
+- First boot (with network): the OS assembles itself -- server, session,
+  identity, boot splash -- then that helper retires forever.
+- Every boot after: **MICRON OS** on a dark screen while it wakes, a
+  3-second boot menu bearing its name, straight into the Micron OS session.
+- No assistant anywhere unless the owner installs one afterwards.
+
 ## Honest limits, this stage
 - The INSTALLER still wears Ubuntu's face and name; our skin covers the
   installed system, not yet the installer. Rebranding the installer and

@@ -63,6 +63,67 @@ X-GNOME-Autostart-enabled=true
 DESKTOP
     echo "This machine is now a Micron OS terminal -> ${SHELL_URL}"
     echo "Undo kiosk with: rm ~/.config/autostart/micronos-shell.desktop" ;;
+  splash)
+    # THE BOOT SCREEN: powering on shows MICRON OS on a clean dark screen
+    # with a pulse, not Ubuntu's text scroll. Script-based Plymouth theme --
+    # no binary assets, lives entirely in this role. Reversible; rescue at
+    # the end. Worst case if a theme ever misbehaves: boot continues with
+    # text only. The splash cannot brick the machine.
+    sudo mkdir -p /usr/share/plymouth/themes/micron
+    sudo tee /usr/share/plymouth/themes/micron/micron.plymouth > /dev/null << 'PLY'
+[Plymouth Theme]
+Name=Micron OS
+Description=The machine, waking as itself
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/micron
+ScriptFile=/usr/share/plymouth/themes/micron/micron.script
+PLY
+    sudo tee /usr/share/plymouth/themes/micron/micron.script > /dev/null << 'SCRIPT'
+// Micron OS boot splash: dark steel, the wordmark, a quiet pulse.
+Window.SetBackgroundTopColor(0.05, 0.07, 0.09);
+Window.SetBackgroundBottomColor(0.03, 0.04, 0.06);
+
+wordmark.image = Image.Text("M I C R O N   O S", 0.90, 0.93, 0.95, 1, "Sans 26");
+wordmark.sprite = Sprite(wordmark.image);
+wordmark.sprite.SetX(Window.GetWidth()/2 - wordmark.image.GetWidth()/2);
+wordmark.sprite.SetY(Window.GetHeight()/2 - wordmark.image.GetHeight()/2);
+
+sub.image = Image.Text("the machine is waking", 0.45, 0.50, 0.56, 1, "Sans 11");
+sub.sprite = Sprite(sub.image);
+sub.sprite.SetX(Window.GetWidth()/2 - sub.image.GetWidth()/2);
+sub.sprite.SetY(Window.GetHeight()/2 + wordmark.image.GetHeight());
+
+counter = 0;
+fun refresh(){
+  counter++;
+  opacity = 0.55 + 0.45 * Math.Sin(counter / 18);
+  wordmark.sprite.SetOpacity(opacity);
+}
+Plymouth.SetRefreshFunction(refresh);
+
+// password prompts (disk encryption etc.) still work, plainly
+fun DisplayQuestionCallback(prompt, entry){
+  q.image = Image.Text(prompt, 0.9, 0.93, 0.95);
+  q.sprite = Sprite(q.image);
+  q.sprite.SetX(Window.GetWidth()/2 - q.image.GetWidth()/2);
+  q.sprite.SetY(Window.GetHeight()*0.72);
+}
+Plymouth.SetDisplayQuestionFunction(DisplayQuestionCallback);
+SCRIPT
+    sudo update-alternatives --install /usr/share/plymouth/themes/default.plymouth \
+      default.plymouth /usr/share/plymouth/themes/micron/micron.plymouth 200
+    sudo update-alternatives --set default.plymouth \
+      /usr/share/plymouth/themes/micron/micron.plymouth
+    echo "Rebuilding the boot image (initramfs) -- takes a minute..."
+    sudo update-initramfs -u
+    echo ""
+    echo "Micron OS boot splash installed. Reboot to see the machine wake as itself."
+    echo "Rescue (restore Ubuntu's splash):"
+    echo "  sudo update-alternatives --set default.plymouth /usr/share/plymouth/themes/bgrt/bgrt.plymouth && sudo update-initramfs -u"
+    ;;
+
   identity)
     # THE NAME: the machine identifies as Micron OS everywhere an OS states
     # its name — boot menu, About screen, login banner, terminal issue line.
@@ -86,6 +147,13 @@ PYID
     else
       echo 'GRUB_DISTRIBUTOR="Micron OS"' | sudo tee -a /etc/default/grub > /dev/null
     fi
+    # a PROPER boot menu: visible for 3 seconds, named Micron OS, house colors
+    sudo sed -i 's|^GRUB_TIMEOUT_STYLE=.*|GRUB_TIMEOUT_STYLE=menu|' /etc/default/grub
+    sudo sed -i 's|^GRUB_TIMEOUT=.*|GRUB_TIMEOUT=3|' /etc/default/grub
+    grep -q '^GRUB_COLOR_NORMAL' /etc/default/grub || \
+      echo 'GRUB_COLOR_NORMAL="light-gray/black"' | sudo tee -a /etc/default/grub > /dev/null
+    grep -q '^GRUB_COLOR_HIGHLIGHT' /etc/default/grub || \
+      echo 'GRUB_COLOR_HIGHLIGHT="white/blue"' | sudo tee -a /etc/default/grub > /dev/null
     sudo update-grub
     # login screen: the name above the prompt
     sudo mkdir -p /etc/gdm3
@@ -203,5 +271,5 @@ DESK
     echo "Done. Alfred already binds to localhost by default, so nothing off"
     echo "this machine can reach him unless you pass --host 0.0.0.0 AND open a"
     echo "port above. The firewall + auto-updates are the real perimeter." ;;
-  *) echo "usage: $0 core|worker|kiosk [host]|device <host>|session|identity|sudo|harden"; exit 1 ;;
+  *) echo "usage: $0 core|worker|kiosk [host]|device <host>|session|identity|splash|sudo|harden"; exit 1 ;;
 esac
