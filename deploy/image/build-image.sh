@@ -33,6 +33,18 @@ sed -i 's|---|autoinstall ---|g' "$WORK/grub.cfg"
 sed -i 's|Try or Install Ubuntu|Install Micron OS|g' "$WORK/grub.cfg"
 sed -i 's|Ubuntu (safe graphics)|Micron OS (safe graphics)|g' "$WORK/grub.cfg"
 sed -i 's|set timeout=30|set timeout=5|' "$WORK/grub.cfg" || true
+sed -i 's|quiet splash|quiet|g' "$WORK/grub.cfg"          # no Ubuntu logo at disc boot
+sed -i 's|Ubuntu|Micron OS|g' "$WORK/grub.cfg"            # any remaining menu strings
+# loopback.cfg carries a copy of the menu; brand it too if present
+if xorriso -osirrox on -indev "$SRC" -extract /boot/grub/loopback.cfg "$WORK/loopback.cfg" >>"$LOG" 2>&1; then
+  chmod u+w "$WORK/loopback.cfg"
+  sed -i 's|---|autoinstall ---|g; s|quiet splash|quiet|g; s|Ubuntu|Micron OS|g; s|Try or Install Micron OS|Install Micron OS|g' "$WORK/loopback.cfg"
+  HAVE_LOOPBACK=1
+else
+  HAVE_LOOPBACK=0
+fi
+# the disc's identity card
+printf 'Micron OS 0.1\n' > "$WORK/disk-info"
 
 echo "== forging micron-os.iso (writes ~6GB; several minutes) =="
 if ! xorriso -indev "$SRC" -outdev "$OUT" \
@@ -42,6 +54,8 @@ if ! xorriso -indev "$SRC" -outdev "$OUT" \
      -map "$HERE/firstboot.sh" /micron/firstboot.sh \
      -map "$HERE/micron-firstboot.service" /micron/micron-firstboot.service \
      -map "$WORK/grub.cfg" /boot/grub/grub.cfg \
+     -map "$WORK/disk-info" /.disk/info \
+     $( [ "$HAVE_LOOPBACK" = 1 ] && printf %s '-map '"$WORK"'/loopback.cfg /boot/grub/loopback.cfg' ) \
      >>"$LOG" 2>&1; then
   echo "FORGE FAILED -- last lines of the log:"; tail -10 "$LOG"; exit 1
 fi
