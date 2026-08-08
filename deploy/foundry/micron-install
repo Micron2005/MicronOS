@@ -1,0 +1,78 @@
+#!/bin/bash
+# Micron OS's OWN installer. No wizard borrowed from anyone.
+# Run from the live disc:  sudo micron-install
+# Guided, explicit, and refuses to act without the disk's exact name typed.
+set -e
+[ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
+echo "==================================================="
+echo "  MICRON OS INSTALLER"
+echo "==================================================="
+echo
+echo "Disks on this machine:"
+lsblk -d -o NAME,SIZE,MODEL | grep -v "^loop"
+echo
+echo "EVERYTHING on the disk you choose will be ERASED."
+read -rp "Type the exact disk name to install onto (e.g. nvme0n1): " DISK
+[ -b "/dev/$DISK" ] || { echo "/dev/$DISK is not a disk"; exit 1; }
+echo
+lsblk "/dev/$DISK" -o NAME,SIZE,FSTYPE,MOUNTPOINTS
+echo
+read -rp "FINAL CONFIRMATION -- type ERASE $DISK exactly: " CONFIRM
+[ "$CONFIRM" = "ERASE $DISK" ] || { echo "not confirmed; nothing done"; exit 1; }
+
+read -rp "Your username for this machine: " NEWUSER
+while :; do
+  read -rsp "Password: " P1; echo
+  read -rsp "Again: " P2; echo
+  [ "$P1" = "$P2" ] && [ -n "$P1" ] && break
+  echo "Passwords differ or empty; again."
+done
+
+case "$DISK" in nvme*|mmcblk*) PP="p" ;; *) PP="" ;; esac
+EFI="/dev/${DISK}${PP}1"; ROOTP="/dev/${DISK}${PP}2"
+
+echo "== partitioning =="
+wipefs -a "/dev/$DISK" >/dev/null
+parted -s "/dev/$DISK" mklabel gpt \
+  mkpart ESP fat32 1MiB 513MiB set 1 esp on \
+  mkpart micron ext4 513MiB 100%
+mkfs.vfat -F32 "$EFI" >/dev/null
+mkfs.ext4 -F -L micron-root "$ROOTP" >/dev/null
+
+echo "== laying down Micron OS (a few minutes) =="
+mount "$ROOTP" /mnt
+mkdir -p /mnt/boot/efi
+mount "$EFI" /mnt/boot/efi
+rsync -aHAX --info=progress2 \
+  --exclude=/proc/* --exclude=/sys/* --exclude=/dev/* --exclude=/run/* \
+  --exclude=/mnt/* --exclude=/media/* --exclude=/tmp/* \
+  --exclude=/lib/live --exclude=/boot/efi/* \
+  / /mnt/
+
+echo "== making it bootable =="
+UUID=$(blkid -s UUID -o value "$ROOTP")
+EFIUUID=$(blkid -s UUID -o value "$EFI")
+cat > /mnt/etc/fstab << EOF
+UUID=$UUID / ext4 defaults 0 1
+UUID=$EFIUUID /boot/efi vfat umask=0077 0 1
+EOF
+for d in dev proc sys run; do mount --bind /$d /mnt/$d; done
+chroot /mnt bash -c "
+  apt-get -y purge live-boot >/dev/null 2>&1 || true
+  update-initramfs -u
+  grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id='Micron OS' --recheck
+  update-grub
+  useradd -m -s /bin/bash -G sudo,netdev '$NEWUSER' 2>/dev/null || true
+  echo '$NEWUSER:$P1' | chpasswd
+  # the installed session runs as the owner, not the live user
+  sed -i 's/User=micron/User=$NEWUSER/' /etc/systemd/system/micronos.service
+  sed -i 's/User=micron/User=$NEWUSER/' /etc/systemd/system/micron-session.service
+  sed -i 's|/run/user/1000|/run/user/'\$(id -u $NEWUSER)'|g' /etc/systemd/system/micron-session.service
+  userdel -r micron 2>/dev/null || true
+" 
+for d in dev proc sys run; do umount -l /mnt/$d 2>/dev/null || true; done
+umount /mnt/boot/efi /mnt
+echo
+echo "==================================================="
+echo "  Micron OS installed. Remove the stick and reboot."
+echo "==================================================="
