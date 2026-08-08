@@ -7,14 +7,16 @@ SRC="$1"
 [ -f "$SRC" ] || { echo "usage: $0 <ubuntu-24.04-desktop.iso>"; exit 1; }
 command -v xorriso >/dev/null || { echo "need xorriso: sudo apt install -y xorriso"; exit 1; }
 HERE="$(cd "$(dirname "$0")" && pwd)"
-WORK="$(mktemp -d)"
-LOG="$WORK.log"
 OUT="$(dirname "$SRC")/micron-os.iso"
+# work beside the ISO on the big disk -- /tmp is often a small scratch space
+WORK="$(mktemp -d "$(dirname "$SRC")/micron-forge.XXXXXX")"
+LOG="$WORK.log"
 # the forge needs room: ~7GB extracted tree + ~7GB output
 NEED_GB=14
-AVAIL_GB=$(df -BG --output=avail "$(dirname "$WORK")" | tail -1 | tr -dc '0-9')
+AVAIL_GB=$(df -BG --output=avail "$(dirname "$SRC")" | tail -1 | tr -dc '0-9')
 if [ "${AVAIL_GB:-0}" -lt "$NEED_GB" ]; then
-  echo "Not enough space in $(dirname "$WORK"): ${AVAIL_GB}G free, need ${NEED_GB}G"; exit 1
+  echo "Not enough space in $(dirname "$SRC"): ${AVAIL_GB}G free, need ${NEED_GB}G"
+  rmdir "$WORK"; exit 1
 fi
 echo "== extracting the stock ISO (quiet for a few minutes; log: $LOG) =="
 if ! xorriso -osirrox on -indev "$SRC" -extract / "$WORK" >"$LOG" 2>&1; then
