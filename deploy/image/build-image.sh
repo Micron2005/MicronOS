@@ -11,6 +11,7 @@ OUT="$(dirname "$SRC")/micron-os.iso"
 # work beside the ISO on the big disk -- /tmp is often a small scratch space
 WORK="$(mktemp -d "$(dirname "$SRC")/micron-forge.XXXXXX")"
 LOG="$WORK.log"
+trap 'rm -rf "$WORK"' EXIT
 # the forge needs room: ~7GB extracted tree + ~7GB output
 NEED_GB=14
 AVAIL_GB=$(df -BG --output=avail "$(dirname "$SRC")" | tail -1 | tr -dc '0-9')
@@ -45,12 +46,11 @@ if ! xorriso -as mkisofs -r -V "MICRON_OS" \
   -b '/boot/grub/i386-pc/eltorito.img' \
   -no-emul-boot -boot-load-size 4 -boot-info-table --grub2-boot-info \
   -eltorito-alt-boot \
-  -e '--interval:appended_partition_2:::' \
+  -e '--interval:appended_partition_2:all::' \
   -no-emul-boot \
   -o "$OUT" "$WORK" >>"$LOG" 2>&1; then
   echo "REPACK FAILED -- last lines of the log:"; tail -8 "$LOG"; exit 1
 fi
-rm -rf "$WORK"
 echo "== done: $OUT =="
 echo "Flash it like any ISO. Boot it, answer two questions (you, and the"
 echo "disk), and the machine becomes Micron OS."
