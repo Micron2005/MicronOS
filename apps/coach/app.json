@@ -1,6 +1,7 @@
 {
   "name": "Coach",
-  "icon": "▲",
+  "icon": "\u25b2",
   "version": "1.0",
-  "description": "The workout coach. Plans sessions around your goal and equipment, logs what you actually did, and keeps the streak honest."
+  "description": "The workout coach. Plans sessions around your goal and equipment, logs what you actually did, and keeps the streak honest.",
+  "requires_assistant": true
 }

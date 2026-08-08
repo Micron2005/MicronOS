@@ -1,0 +1,17 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  body{background:#0d1117;color:#e6edf3;height:100vh;display:flex;align-items:center;
+    justify-content:center;font:14px system-ui,sans-serif;text-align:center;padding:24px}
+  button{background:#4C8DFF;border:none;color:#fff;border-radius:6px;padding:12px 24px;
+    cursor:pointer;font-size:15px;margin-top:16px}
+</style></head><body><div>
+  <div>Open a system terminal on this machine.</div>
+  <button id="go">Open Terminal</button>
+  <div id="msg" style="margin-top:14px;color:#8b95a1;font-size:13px"></div>
+</div><script>
+  document.getElementById('go').onclick=async()=>{
+    const r=await fetch('/api/terminal/open',{method:'POST'});
+    const d=await r.json().catch(()=>({}));
+    document.getElementById('msg').textContent = r.ok ? 'Opened.' :
+      (d.hint || d.error || 'Could not open a terminal.');
+  };
+</script></body></html>

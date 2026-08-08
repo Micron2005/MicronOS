@@ -1,0 +1,7 @@
+{
+  "name": "Editor",
+  "icon": "\ud83d\udcdd",
+  "version": "1.0",
+  "requires_assistant": false,
+  "description": "A plain text editor. Open, edit, save \u2014 no assistant needed."
+}

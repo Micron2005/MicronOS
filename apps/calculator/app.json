@@ -1,0 +1,7 @@
+{
+  "name": "Calculator",
+  "icon": "\u25a4",
+  "version": "1.0",
+  "requires_assistant": false,
+  "description": "A calculator. Adds numbers with no AI required \u2014 a true OS app."
+}

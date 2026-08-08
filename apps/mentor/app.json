@@ -1,6 +1,7 @@
 {
   "name": "Mentor",
-  "icon": "◆",
+  "icon": "\u25c6",
   "version": "1.0",
-  "description": "A standing thread with Alfred for learning, planning, and thinking things through — kept apart from the day's chatter."
+  "description": "A standing thread with Alfred for learning, planning, and thinking things through \u2014 kept apart from the day's chatter.",
+  "requires_assistant": true
 }

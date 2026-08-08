@@ -890,24 +890,39 @@ function renderDockState(){
     if (!open && dot) dot.remove();
   }
 }
+let HAS_ASSISTANT = false;
 async function loadApps(){
   try {
+    try { HAS_ASSISTANT = !!(await (await fetch('/api/status')).json()).assistant; }
+    catch(e){ HAS_ASSISTANT = false; }
     const res = await fetch('/api/apps');
     const data = await res.json();
     const box = document.getElementById('apps'); box.replaceChildren();
-    if (!data.apps || !data.apps.length){
-      box.innerHTML = '<div class="empty">No apps installed.</div>'; return;
+    // Assistant apps (Mentor, Coach) are front-ends for the AI. Without one
+    // installed they are hidden entirely — never shown broken. True OS apps
+    // (Browser, Map) always appear. This is the honest taxonomy.
+    const apps = (data.apps || []).filter(a => !a.requires_assistant || HAS_ASSISTANT);
+    if (!apps.length){
+      box.innerHTML = '<div class="empty">No apps.</div>'; return;
     }
-    for (const app of data.apps){
+    for (const app of apps){
       const b = document.createElement('button');
       b.className = 'app-launch tb-app';
       b.dataset.appid = app.id;
       b.innerHTML = `<span class="glyph">${app.icon || '▣'}</span><span>${app.name}</span>`;
       // external apps (the Browser) open the real program in a real
       // window — which is inside Micron OS, because the OS is the machine.
-      b.onclick = () => app.external
-        ? window.open(app.href || 'about:blank', '_blank', 'noopener')
-        : openApp(app);
+      b.onclick = () => {
+        if (app.launch === 'terminal'){
+          fetch('/api/terminal/open', {method:'POST'}).then(r => {
+            if (!r.ok) r.json().then(d => alert(d.hint || d.error || 'No terminal found'));
+          });
+        } else if (app.external){
+          window.open(app.href || 'about:blank', '_blank', 'noopener');
+        } else {
+          openApp(app);
+        }
+      };
       box.appendChild(b);
     }
     renderDockState();

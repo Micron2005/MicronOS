@@ -1,6 +1,7 @@
 {
   "name": "Map",
-  "icon": "◈",
+  "icon": "\u25c8",
   "version": "1.0",
-  "description": "The owner's map. Real streets, 2D or 3D, and your own marks: every pin has a reason."
+  "description": "The owner's map. Real streets, 2D or 3D, and your own marks: every pin has a reason.",
+  "requires_assistant": false
 }

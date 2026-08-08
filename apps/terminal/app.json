@@ -1,0 +1,9 @@
+{
+  "name": "Terminal",
+  "icon": "\u2328",
+  "version": "1.0",
+  "requires_assistant": false,
+  "external": true,
+  "launch": "terminal",
+  "description": "A real terminal. Opens the system terminal \u2014 no assistant needed."
+}

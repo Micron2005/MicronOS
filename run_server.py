@@ -199,6 +199,20 @@ def make_handler(bridge: Bridge):
                     self._json(200, bridge.status())
                 except Exception as exc:
                     self._json(500, {"error": str(exc)})
+            elif self.path.startswith("/api/files/list"):
+                import micron_files, urllib.parse as _up
+                q = _up.parse_qs(_up.urlparse(self.path).query)
+                try:
+                    self._json(200, micron_files.list_dir(q.get("path", [""])[0]))
+                except Exception as exc:
+                    self._json(400, {"error": str(exc)})
+            elif self.path.startswith("/api/files/read"):
+                import micron_files, urllib.parse as _up
+                q = _up.parse_qs(_up.urlparse(self.path).query)
+                try:
+                    self._json(200, micron_files.read_file(q.get("path", [""])[0]))
+                except Exception as exc:
+                    self._json(404, {"error": str(exc)})
             elif self.path == "/api/apps":
                 # An app is a folder in apps/ with an app.json. That is the
                 # entire registry — no database, no build step. Delete the
@@ -432,6 +446,27 @@ def make_handler(bridge: Bridge):
                     self._json(500, {"error": str(exc),
                         "hint": "shutdown/restart need the sudo role: "
                                 "./deploy/install-micronos.sh sudo"})
+                return
+            if self.path == "/api/files/write":
+                import micron_files, json as _j
+                length = int(self.headers.get("Content-Length", "0"))
+                body = _j.loads(self.rfile.read(length) or b"{}")
+                try:
+                    self._json(200, micron_files.write_file(
+                        body.get("path", ""), body.get("text", "")))
+                except Exception as exc:
+                    self._json(400, {"error": str(exc)})
+                return
+            if self.path == "/api/terminal/open":
+                import shutil as _sh, subprocess as _sp
+                term = next((t for t in ("gnome-terminal","konsole","xterm","x-terminal-emulator")
+                             if _sh.which(t)), None)
+                if not term:
+                    self._json(500, {"error": "no terminal emulator found"}); return
+                try:
+                    _sp.Popen([term]); self._json(200, {"ok": True})
+                except Exception as exc:
+                    self._json(500, {"error": str(exc)})
                 return
             if self.path == "/api/assistant/open":
                 # Open the assistant in a real terminal. The OS knows only

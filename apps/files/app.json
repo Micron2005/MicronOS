@@ -1,0 +1,7 @@
+{
+  "name": "Files",
+  "icon": "\ud83d\udcc1",
+  "version": "1.0",
+  "requires_assistant": false,
+  "description": "Browse your files. A true OS app \u2014 no assistant needed."
+}
