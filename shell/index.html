@@ -150,13 +150,24 @@
   .tb-right #powerbtn{background:none;border:1px solid var(--line-bright);
     color:var(--ink);border-radius:4px;padding:5px 10px;cursor:pointer;font-size:14px}
   .tb-right #powerbtn:hover{border-color:var(--accent);color:var(--accent)}
-  #powermenu{position:fixed;right:14px;bottom:60px;z-index:250;background:var(--panel);
+  #powermenu{position:fixed;right:14px;top:38px;z-index:250;background:var(--panel);
     border:1px solid var(--line-bright);border-radius:6px;padding:6px;min-width:170px;
     box-shadow:0 12px 40px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:2px}
   #powermenu[hidden]{display:none}
   #powermenu button{background:none;border:none;color:var(--ink);text-align:left;
     padding:9px 12px;border-radius:4px;cursor:pointer;font-size:13px}
   #powermenu button:hover{background:var(--panel-2);color:var(--accent)}
+  .sysinfo{display:flex;flex-direction:column;gap:6px}
+  .sysrow{display:flex;justify-content:space-between;font-size:13px;
+    padding:6px 0;border-bottom:1px solid var(--line)}
+  .sysrow span{color:var(--ink-dim)}
+  .sysrow b{color:var(--ink);font-weight:500}
+  .wifi-list{display:flex;flex-direction:column;gap:4px;margin:8px 0;max-height:180px;overflow-y:auto}
+  .wifi{display:flex;align-items:center;justify-content:space-between;
+    padding:9px 12px;border:1px solid var(--line);border-radius:6px;cursor:pointer;font-size:13px}
+  .wifi:hover{border-color:var(--accent)}
+  .wifi.connected{border-color:var(--accent);color:var(--accent)}
+  .wifi .sig{color:var(--ink-dim);font-size:11px;font-family:var(--mono)}
   /* Appearance controls */
   .seg{background:var(--panel);border:1px solid var(--line-bright);color:var(--ink);
     border-radius:5px;padding:7px 16px;cursor:pointer;font-size:13px}
@@ -185,32 +196,52 @@
     padding:9px 20px;cursor:pointer;font-size:13px;letter-spacing:.06em}
   .w-btns button.ghost{background:none;border:1px solid var(--line-bright);color:var(--ink-dim)}
   .w-btns button:hover{filter:brightness(1.1)}
-  /* The desktop and its bar. The screen is a surface, not a page. */
+  /* Micron OS desktop: a top status bar and a left app rail. The screen is
+     a surface; apps open as windows over it. Windows-meets-Ubuntu, our own. */
   body{overflow:hidden}
   header{display:none}
-  #taskbar{position:fixed;left:0;right:0;bottom:0;height:52px;z-index:200;
-    display:flex;align-items:center;gap:6px;padding:0 14px;
-    background:linear-gradient(180deg, rgba(14,18,28,.92), rgba(9,12,20,.96));
-    border-top:1px solid var(--line-bright);backdrop-filter:blur(10px)}
-  .tb-app{display:flex;align-items:center;gap:8px;background:none;
-    border:1px solid transparent;border-radius:4px;color:var(--ink);
-    padding:7px 12px;cursor:pointer;font-size:13px;position:relative}
-  .tb-app:hover{border-color:var(--line-bright)}
-  .tb-app .glyph{color:var(--brass)}
-  .tb-apps{display:flex;align-items:center;gap:6px;flex:1;overflow-x:auto}
-  .tb-right{display:flex;align-items:center;gap:14px;margin-left:auto}
-  .tb-right #clock{font-family:var(--mono);font-size:13px;color:var(--ink-dim)}
-  .tb-right #terminal{font-family:var(--mono);font-size:11px;color:var(--ink-dim)}
-  .tb-right #settingsbtn{background:none;border:1px solid var(--line-bright);
-    color:var(--ink);border-radius:4px;padding:5px 10px;cursor:pointer}
-  .tb-right #settingsbtn:hover{border-color:var(--brass-dim);color:var(--brass)}
-  #tb-alert{color:var(--brass);font-size:15px;animation:pulse 2s infinite}
+
+  /* Top status bar */
+  #statusbar{position:fixed;top:0;left:0;right:0;height:34px;z-index:210;
+    display:flex;align-items:center;gap:16px;padding:0 16px;
+    background:linear-gradient(180deg, rgba(14,18,28,.96), rgba(11,15,23,.94));
+    border-bottom:1px solid var(--line-bright);backdrop-filter:blur(12px);
+    font-size:13px}
+  #statusbar .sb-brand{font-family:var(--serif);letter-spacing:.24em;
+    text-transform:uppercase;font-size:12px;color:var(--accent);font-weight:600}
+  #statusbar .sb-spring{flex:1}
+  #statusbar #clock{font-family:var(--mono);font-size:12px;color:var(--ink-dim)}
+  #statusbar #net-ind{color:var(--ink-dim);font-size:12px;cursor:pointer;
+    display:flex;align-items:center;gap:5px}
+  #statusbar #net-ind:hover{color:var(--accent)}
+  #statusbar #tb-alert{color:var(--accent);font-size:14px;animation:pulse 2s infinite;cursor:pointer}
+  #statusbar .sb-btn{background:none;border:none;color:var(--ink-dim);
+    cursor:pointer;font-size:15px;padding:2px 6px;border-radius:4px}
+  #statusbar .sb-btn:hover{color:var(--accent);background:var(--panel-2)}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-  .tb-app .running{display:inline-block;width:5px;height:5px;border-radius:50%;
-    background:var(--brass);position:absolute;bottom:3px;left:50%;margin-left:-2px}
+
+  /* Left app rail */
+  #rail{position:fixed;top:34px;bottom:0;left:0;width:76px;z-index:205;
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+    padding:12px 0;overflow-y:auto;
+    background:linear-gradient(90deg, rgba(14,18,28,.96), rgba(11,15,23,.92));
+    border-right:1px solid var(--line-bright);backdrop-filter:blur(12px)}
+  #rail::-webkit-scrollbar{width:0}
+  .tb-app{display:flex;flex-direction:column;align-items:center;gap:4px;
+    background:none;border:1px solid transparent;border-radius:10px;
+    color:var(--ink-dim);padding:9px 6px;cursor:pointer;font-size:10px;
+    width:60px;position:relative;transition:.12s}
+  .tb-app:hover{border-color:var(--line-bright);color:var(--ink);background:var(--panel-2)}
+  .tb-app .glyph{color:var(--accent);font-size:20px;line-height:1}
+  .tb-app span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    max-width:56px;text-align:center}
+  #rail .rail-sep{width:40px;height:1px;background:var(--line);margin:4px 0;flex:none}
+  #rail .rail-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;align-items:center}
+  .tb-app .running{position:absolute;left:2px;top:50%;transform:translateY(-50%);
+    width:3px;height:20px;border-radius:2px;background:var(--accent)}
   /* Alfred's window: his terminal onto the desktop */
-  #alfredwin{width:min(1060px, calc(100vw - 90px));height:min(660px, calc(100vh - 130px));
-    left:45px;top:36px}
+  #alfredwin{width:min(1060px, calc(100vw - 140px));height:min(660px, calc(100vh - 100px));
+    left:100px;top:60px}
   #alfredbody{flex:1;display:flex;min-height:0}
   #alfredbody main{flex:1;display:grid;grid-template-columns:1fr 250px;
     min-height:0;padding:0}
@@ -308,7 +339,7 @@
     <div class="w-mark">M I C R O N &nbsp; O S</div>
     <div class="w-step" data-step="1">
       <p id="w-intro">Micron OS is awake for the first time. This machine is
-      yours: apps in the bar below, settings beside the clock.</p>
+      yours: apps on the left, settings and power at the top right.</p>
       <label id="w-name-label" hidden>An assistant is installed. What should
       he call you?</label>
       <input id="w-name" autocomplete="off" hidden placeholder="Your name, or sir, or anything">
@@ -330,28 +361,49 @@
   </div>
 </div>
 
-<nav id="taskbar" aria-label="System bar">
+<!-- Top status bar: name, clock, network, alerts, settings, power -->
+<div id="statusbar" aria-label="Status bar">
+  <span class="sb-brand">Micron OS</span>
+  <span class="sb-spring"></span>
+  <span id="tb-alert" hidden title="Changes awaiting your approval">●</span>
+  <span id="net-ind" title="Network"><span id="net-glyph">○</span><span id="net-txt">—</span></span>
+  <span id="clock">--:--</span>
+  <button id="settingsbtn" class="sb-btn" aria-label="Settings">⚙</button>
+  <button id="powerbtn" class="sb-btn" aria-label="Power">⏻</button>
+  <input id="wp-file" type="file" accept="image/*" hidden>
+  <div id="powermenu" hidden>
+    <button data-act="lock">Lock</button>
+    <button data-act="logout">Log out</button>
+    <button data-act="restart">Restart</button>
+    <button data-act="shutdown">Shut down</button>
+  </div>
+</div>
+
+<!-- Left app rail -->
+<nav id="rail" aria-label="Apps">
   <button id="tb-alfred" class="tb-app" title="Alfred">
     <span class="glyph">◈</span><span>Alfred</span></button>
-  <div id="apps" class="tb-apps"></div>
-  <div class="tb-right">
-    <span id="tb-alert" hidden title="Changes awaiting your approval">●</span>
-    <span id="terminal"></span>
-    <span id="clock">--:--</span>
-    <button id="settingsbtn" aria-label="Settings">⚙</button>
-    <button id="powerbtn" aria-label="Power">⏻</button>
-    <input id="wp-file" type="file" accept="image/*" hidden>
-    <div id="powermenu" hidden>
-      <button data-act="lock">Lock</button>
-      <button data-act="logout">Log out</button>
-      <button data-act="restart">Restart</button>
-      <button data-act="shutdown">Shut down</button>
-    </div>
-  </div>
+  <div class="rail-sep"></div>
+  <div id="apps" style="display:contents"></div>
 </nav>
 
 <div id="settings" aria-label="Settings">
   <h2>Settings <button id="settingsclose" aria-label="Close settings">✕</button></h2>
+  <div class="setting">
+    <h3>System</h3>
+    <div id="sysinfo" class="sysinfo">
+      <div class="sysrow"><span>Operating system</span><b id="sys-os">Micron OS</b></div>
+      <div class="sysrow"><span>Machine name</span><b id="sys-host">—</b></div>
+      <div class="sysrow"><span>Assistant</span><b id="sys-assistant">—</b></div>
+      <div class="sysrow"><span>Uptime</span><b id="sys-uptime">—</b></div>
+    </div>
+  </div>
+  <div class="setting">
+    <h3>Network</h3>
+    <p id="net-status">Checking connection…</p>
+    <div id="wifi-list" class="wifi-list"></div>
+    <div class="row"><button id="net-refresh" class="ghost">Refresh networks</button></div>
+  </div>
   <div class="setting">
     <h3>Appearance</h3>
     <p>Micron OS is yours to colour. Light or dark, and any accent.</p>
@@ -428,7 +480,7 @@ function wireAppearance(){
 }
 const DEVICE = new URLSearchParams(location.search).get('device') || '';
 wireAppearance();
-if (DEVICE) document.getElementById('terminal').textContent = 'Terminal · ' + DEVICE;
+if (DEVICE){ const el = document.getElementById('net-txt'); if (el) el.textContent = DEVICE; }
 const log = document.getElementById('log');
 const form = document.getElementById('composer');
 const input = document.getElementById('msg');
@@ -731,18 +783,22 @@ function wireBuiltinWindow(el, id, dockBtn){
   let done = false;
   try { done = localStorage.getItem('micron.setup') === '1'; } catch(e){}
   if (done) return;
-  let hasAssistant = false;
+  let hasAssistant = false, aname = 'Your assistant';
   try {
     const st = await (await fetch('/api/status')).json();
     hasAssistant = !!st.assistant;
+    aname = st.assistant_name || aname;
   } catch(e){}
   const w = document.getElementById('welcome');
   if (hasAssistant){
-    document.getElementById('w-name-label').hidden = false;
+    const lbl = document.getElementById('w-name-label');
+    lbl.hidden = false;
+    lbl.textContent = aname + ' has his own name \u2014 this is about YOURS. '
+      + 'What should ' + aname + ' call you?';
     document.getElementById('w-name').hidden = false;
     document.getElementById('w-intro').textContent =
-      'Micron OS is awake for the first time. An assistant keeps the house '
-      + '\u2014 he knows nothing yet, by design, and learns you from here on.';
+      'Micron OS is awake for the first time. ' + aname + ', whom you '
+      + 'installed, knows nothing yet by design \u2014 he learns you from here on.';
   }
   w.hidden = false;
   const step = (n) => {
@@ -841,7 +897,7 @@ function openApp(app){
     '<button class="wclose" title="Close">✕</button></span></div>' +
     '<iframe title="App"></iframe>';
   el.querySelector('.t').textContent = app.name;
-  el.querySelector('iframe').src = '/apps/' + app.id + '/';
+  el.querySelector('iframe').src = app.url ? app.url : ('/apps/' + app.id + '/');
   el.querySelector('.wclose').onclick = () => {
     saveGeom(app.id, el); el.remove(); delete windows[app.id]; renderDockState();
   };
@@ -917,10 +973,8 @@ async function loadApps(){
           fetch('/api/terminal/open', {method:'POST'}).then(r => {
             if (!r.ok) r.json().then(d => alert(d.hint || d.error || 'No terminal found'));
           });
-        } else if (app.external){
-          window.open(app.href || 'about:blank', '_blank', 'noopener');
         } else {
-          openApp(app);
+          openApp(app);   // everything opens as a closeable window now
         }
       };
       box.appendChild(b);
