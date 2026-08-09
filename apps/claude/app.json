@@ -1,0 +1,7 @@
+{
+  "name": "Claude",
+  "icon": "\u2738",
+  "version": "1.0",
+  "requires_assistant": false,
+  "note": "Talk to Claude (Anthropic). Needs internet and your own API key; the key stays on this machine."
+}
