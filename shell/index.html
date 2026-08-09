@@ -272,19 +272,6 @@
     color:var(--ink);border-radius:3px;padding:2px 10px;cursor:pointer;font-size:12px}
   .appwindow .wbtns button:hover{border-color:var(--brass-dim);color:var(--brass)}
   .appwindow iframe{flex:1;border:0;width:100%;background:var(--cave)}
-  .appwindow.maximized{left:80px !important;top:38px !important;
-    width:calc(100vw - 88px) !important;height:calc(100vh - 46px) !important;
-    resize:none;border-radius:4px}
-  .appwindow.snap-left{left:80px !important;top:38px !important;
-    width:calc((100vw - 88px)/2 - 4px) !important;height:calc(100vh - 46px) !important;
-    resize:none}
-  .appwindow.snap-right{left:calc(80px + (100vw - 88px)/2 + 4px) !important;top:38px !important;
-    width:calc((100vw - 88px)/2 - 4px) !important;height:calc(100vh - 46px) !important;
-    resize:none}
-  .appwindow:fullscreen{left:0 !important;top:0 !important;width:100vw !important;
-    height:100vh !important;border:0;border-radius:0;resize:none}
-  #snap-ghost{position:fixed;z-index:39;background:color-mix(in srgb, var(--accent) 18%, transparent);
-    border:2px solid var(--accent);border-radius:6px;pointer-events:none;display:none}
   body.dragging iframe{pointer-events:none}
   .app-launch .running{display:inline-block;width:5px;height:5px;border-radius:50%;
     background:var(--brass);margin-left:6px;vertical-align:middle}
@@ -311,9 +298,7 @@
 
 <div id="alfredwin" class="appwindow" data-win="alfred">
   <div class="titlebar"><span class="t">Alfred</span>
-    <span class="wbtns"><button class="wfull" title="Fullscreen (Esc exits)">⛶</button>
-    <button class="wmin" title="Minimize">–</button>
-    <button class="wmax" title="Maximize / restore">▢</button>
+    <span class="wbtns"><button class="wmin" title="Minimize">–</button>
     <button class="wclose" title="Close">✕</button></span></div>
   <div id="alfredbody">
   <main>
@@ -753,84 +738,6 @@ function focusWin(id){
   if (w){ w.el.classList.add('focused'); w.el.style.zIndex = ++ztop; }
 }
 
-// ---- real window management: maximize, edge snap, true fullscreen ----
-const SNAPS = ['maximized','snap-left','snap-right'];
-function unsnap(el){
-  for (const c of SNAPS) el.classList.remove(c);
-}
-function isSnapped(el){ return SNAPS.some(c => el.classList.contains(c)); }
-function toggleMax(id){
-  const w = windows[id]; if (!w) return;
-  if (w.el.classList.contains('maximized')) unsnap(w.el);
-  else { unsnap(w.el); w.el.classList.add('maximized'); }
-  focusWin(id);
-}
-function snapGhost(mode){
-  let g = document.getElementById('snap-ghost');
-  if (!g){ g = document.createElement('div'); g.id = 'snap-ghost'; document.body.appendChild(g); }
-  if (!mode){ g.style.display = 'none'; return; }
-  const railW = 80, sbH = 38, gap = 8;
-  const w2 = (innerWidth - railW - gap) / 2 - 4;
-  if (mode === 'max'){ g.style.left = railW+'px'; g.style.top = sbH+'px';
-    g.style.width = (innerWidth - railW - gap)+'px'; g.style.height = (innerHeight - sbH - gap)+'px'; }
-  if (mode === 'left'){ g.style.left = railW+'px'; g.style.top = sbH+'px';
-    g.style.width = w2+'px'; g.style.height = (innerHeight - sbH - gap)+'px'; }
-  if (mode === 'right'){ g.style.left = (railW + w2 + 8)+'px'; g.style.top = sbH+'px';
-    g.style.width = w2+'px'; g.style.height = (innerHeight - sbH - gap)+'px'; }
-  g.style.display = 'block';
-}
-function snapModeFor(x, y){
-  if (y <= 40) return 'max';
-  if (x <= 82) return 'left';
-  if (x >= innerWidth - 6) return 'right';
-  return null;
-}
-function wireDrag(el, id){
-  const bar = el.querySelector('.titlebar');
-  bar.addEventListener('dblclick', (e) => {
-    if (e.target.tagName === 'BUTTON') return;
-    toggleMax(id);
-  });
-  bar.addEventListener('mousedown', (e) => {
-    if (e.target.tagName === 'BUTTON') return;
-    let offX = e.clientX - el.offsetLeft, offY = e.clientY - el.offsetTop;
-    if (isSnapped(el)){
-      // dragging a snapped window releases it under the cursor
-      unsnap(el);
-      offX = el.offsetWidth / 2; offY = 14;
-      el.style.left = (e.clientX - offX) + 'px';
-      el.style.top = (e.clientY - offY) + 'px';
-    }
-    document.body.classList.add('dragging');
-    function move(ev){
-      el.style.left = Math.max(0, Math.min(innerWidth - 120, ev.clientX - offX)) + 'px';
-      el.style.top = Math.max(34, Math.min(innerHeight - 60, ev.clientY - offY)) + 'px';
-      snapGhost(snapModeFor(ev.clientX, ev.clientY));
-    }
-    function up(ev){
-      document.body.classList.remove('dragging');
-      removeEventListener('mousemove', move); removeEventListener('mouseup', up);
-      snapGhost(null);
-      const mode = snapModeFor(ev.clientX, ev.clientY);
-      if (mode === 'max') el.classList.add('maximized');
-      else if (mode === 'left') el.classList.add('snap-left');
-      else if (mode === 'right') el.classList.add('snap-right');
-      else saveGeom(id, el);
-    }
-    addEventListener('mousemove', move); addEventListener('mouseup', up);
-  });
-}
-function wireChromeButtons(el, id, opts){
-  const q = (c) => el.querySelector(c);
-  if (q('.wfull')) q('.wfull').onclick = () => {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else el.requestFullscreen().catch(()=>{});
-  };
-  if (q('.wmax')) q('.wmax').onclick = () => toggleMax(id);
-  if (q('.wmin')) q('.wmin').onclick = opts.minimize;
-  if (q('.wclose')) q('.wclose').onclick = opts.close;
-}
-
 // Alfred's window is built into the page, not an iframe app; it registers
 // with the same windowing so drag, minimize, focus, and the dock dot all
 // behave identically. Closing it leaves a clean desktop; he keeps running.
@@ -839,19 +746,35 @@ function wireBuiltinWindow(el, id, dockBtn){
   const g = loadGeom(id);
   if (g){ el.style.left = g.l+'px'; el.style.top = g.t+'px';
           el.style.width = g.w+'px'; el.style.height = g.h+'px'; }
-  const hide = () => {
+  el.querySelector('.wclose').onclick = () => {
     saveGeom(id, el); el.style.display = 'none';
     windows[id].minimized = true; renderDockState();
   };
-  wireChromeButtons(el, id, {close: hide, minimize: hide});
+  el.querySelector('.wmin').onclick = el.querySelector('.wclose').onclick;
   el.addEventListener('mousedown', () => focusWin(id));
-  wireDrag(el, id);
+  const bar = el.querySelector('.titlebar');
+  bar.addEventListener('mousedown', (e) => {
+    if (e.target.tagName === 'BUTTON') return;
+    const offX = e.clientX - el.offsetLeft, offY = e.clientY - el.offsetTop;
+    document.body.classList.add('dragging');
+    function move(ev){
+      el.style.left = Math.max(0, Math.min(innerWidth - 120, ev.clientX - offX)) + 'px';
+      el.style.top = Math.max(0, Math.min(innerHeight - 60, ev.clientY - offY)) + 'px';
+    }
+    function up(){
+      document.body.classList.remove('dragging');
+      removeEventListener('mousemove', move); removeEventListener('mouseup', up);
+      saveGeom(id, el);
+    }
+    addEventListener('mousemove', move); addEventListener('mouseup', up);
+  });
   dockBtn.onclick = () => {
     if (windows[id].minimized || el.style.display === 'none'){
       el.style.display = 'flex'; windows[id].minimized = false;
       focusWin(id); renderDockState();
     } else if (el.classList.contains('focused')){
-      hide();
+      saveGeom(id, el); el.style.display = 'none';
+      windows[id].minimized = true; renderDockState();
     } else { focusWin(id); }
   };
 }
@@ -970,20 +893,37 @@ function openApp(app){
   el.style.height = (g ? g.h : Math.min(640, innerHeight - 160)) + 'px';
   el.innerHTML =
     '<div class="titlebar"><span class="t"></span>' +
-    '<span class="wbtns"><button class="wfull" title="Fullscreen (Esc exits)">\u26f6</button>' +
-    '<button class="wmin" title="Minimize">\u2013</button>' +
-    '<button class="wmax" title="Maximize / restore">\u25a2</button>' +
-    '<button class="wclose" title="Close">\u2715</button></span></div>' +
+    '<span class="wbtns"><button class="wmin" title="Minimize">–</button>' +
+    '<button class="wclose" title="Close">✕</button></span></div>' +
     '<iframe title="App"></iframe>';
   el.querySelector('.t').textContent = app.name;
-  el.querySelector('iframe').src = '/apps/' + app.id + '/';
-  wireChromeButtons(el, app.id, {
-    close: () => { saveGeom(app.id, el); el.remove(); delete windows[app.id]; renderDockState(); },
-    minimize: () => { saveGeom(app.id, el); windows[app.id].minimized = true;
-                      el.classList.add('minimized'); renderDockState(); },
-  });
+  el.querySelector('iframe').src = app.url ? app.url : ('/apps/' + app.id + '/');
+  el.querySelector('.wclose').onclick = () => {
+    saveGeom(app.id, el); el.remove(); delete windows[app.id]; renderDockState();
+  };
+  el.querySelector('.wmin').onclick = () => {
+    saveGeom(app.id, el); windows[app.id].minimized = true;
+    el.classList.add('minimized'); renderDockState();
+  };
   el.addEventListener('mousedown', () => focusWin(app.id));
-  wireDrag(el, app.id);
+  // dragging by the titlebar; iframes go pointer-inert during the drag so
+  // the mouse is never swallowed mid-move
+  const bar = el.querySelector('.titlebar');
+  bar.addEventListener('mousedown', (e) => {
+    if (e.target.tagName === 'BUTTON') return;
+    const offX = e.clientX - el.offsetLeft, offY = e.clientY - el.offsetTop;
+    document.body.classList.add('dragging');
+    function move(ev){
+      el.style.left = Math.max(0, Math.min(innerWidth - 120, ev.clientX - offX)) + 'px';
+      el.style.top = Math.max(0, Math.min(innerHeight - 60, ev.clientY - offY)) + 'px';
+    }
+    function up(){
+      document.body.classList.remove('dragging');
+      removeEventListener('mousemove', move); removeEventListener('mouseup', up);
+      saveGeom(app.id, el);
+    }
+    addEventListener('mousemove', move); addEventListener('mouseup', up);
+  });
   document.body.appendChild(el);
   windows[app.id] = {el, app, minimized: false};
   focusWin(app.id); renderDockState();
