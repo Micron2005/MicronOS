@@ -1,0 +1,57 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><style>
+  :root{--bg:#0d1117;--panel:#161b22;--line:#232a33;--ink:#e6edf3;--dim:#8b95a1;--accent:#4C8DFF}
+  html[data-theme="light"]{--bg:#f4f5f7;--panel:#fff;--line:#dfe3e8;--ink:#1b2027;--dim:#5a6472}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);height:100vh;display:flex;flex-direction:column;font:14px system-ui,sans-serif}
+  #bar{display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid var(--line);background:var(--panel)}
+  #bar button{background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:5px;
+    padding:6px 11px;cursor:pointer}
+  #bar button:hover{border-color:var(--accent)}
+  #url{flex:1;background:var(--bg);border:1px solid var(--line);color:var(--ink);border-radius:6px;
+    padding:7px 12px;font-size:13px}
+  #url:focus{outline:none;border-color:var(--accent)}
+  #view{flex:1;border:0;width:100%;background:#fff}
+  #home{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;
+    background:var(--bg);color:var(--ink)}
+  #home h1{font-size:22px;letter-spacing:.1em;color:var(--accent)}
+  #home .quick{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;max-width:420px}
+  #home .quick a{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 18px;
+    color:var(--ink);text-decoration:none;font-size:13px}
+  #home .quick a:hover{border-color:var(--accent)}
+</style></head><body>
+<div id="bar">
+  <button id="back" title="Back">‹</button>
+  <button id="fwd" title="Forward">›</button>
+  <button id="reload" title="Reload">⟳</button>
+  <button id="homebtn" title="Home">⌂</button>
+  <input id="url" placeholder="Search or type a web address" autocomplete="off">
+  <button id="go">Go</button>
+</div>
+<div id="home">
+  <h1>MICRON&nbsp;&nbsp;WEB</h1>
+  <div class="quick">
+    <a data-go="https://duckduckgo.com">DuckDuckGo</a>
+    <a data-go="https://en.wikipedia.org">Wikipedia</a>
+    <a data-go="https://github.com/Micron2005">GitHub</a>
+    <a data-go="https://www.openstreetmap.org">Maps</a>
+  </div>
+</div>
+<iframe id="view" hidden referrerpolicy="no-referrer"></iframe>
+<script>
+  try{const t=localStorage.getItem('micron.theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}
+  const view=document.getElementById('view'), home=document.getElementById('home'), url=document.getElementById('url');
+  function norm(s){ s=s.trim(); if(!s) return '';
+    if(/^https?:\/\//.test(s)) return s;
+    if(/^[\w-]+(\.[\w-]+)+/.test(s)) return 'https://'+s;
+    return 'https://duckduckgo.com/?q='+encodeURIComponent(s); }
+  function nav(s){ const u=norm(s); if(!u) return;
+    home.hidden=true; view.hidden=false; view.src=u; url.value=u; }
+  document.getElementById('go').onclick=()=>nav(url.value);
+  url.addEventListener('keydown',e=>{ if(e.key==='Enter') nav(url.value); });
+  document.getElementById('back').onclick=()=>{ try{view.contentWindow.history.back();}catch(e){} };
+  document.getElementById('fwd').onclick=()=>{ try{view.contentWindow.history.forward();}catch(e){} };
+  document.getElementById('reload').onclick=()=>{ try{view.contentWindow.location.reload();}catch(e){ if(view.src)view.src=view.src; } };
+  document.getElementById('homebtn').onclick=()=>{ view.hidden=true; home.hidden=false; view.src='about:blank'; url.value=''; };
+  for(const a of document.querySelectorAll('#home .quick a')) a.onclick=(e)=>{ e.preventDefault(); nav(a.dataset.go); };
+</script></body></html>

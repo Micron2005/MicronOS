@@ -16,3 +16,12 @@ fallback; the Foundry is the true road.
 Honest status: first firing WILL hit bumps (drivers, package names shift
 between Debian releases) -- that is what the spare SSD and the verbose boot
 menu entry are for. Photos of anything strange; we tune the recipe.
+
+## Secure Boot (first-firing lesson, Aug 2026)
+
+Firmware with Secure Boot ON only launches Microsoft-signed bootloaders.
+Ubuntu's discs carry that signature; a self-forged OS does not — the result
+is `prohibited by secure boot policy` + grub rescue. Fix on your own
+machine: disable Secure Boot in firmware. For distributing to others:
+either document that step (many independent distros do) or adopt the
+shim/MOK signing chain — tracked as a Stage 2 polish item.
